@@ -1,0 +1,161 @@
+ESP-ROM:esp32s31-20251218
+Build:Dec 18 2025
+rst:0x1 (POWERON),boot:0x58 (SPI_FAST_FLASH_BOOT)
+SPI mode:DIO, clock div:1
+load:0x2f040000,len:0x95ec
+entry 0x2f040000
+
+U-Boot SPL 2024.07 (Sep 23 2026 - 18:10:19 +0800)
+ESP32-S31 SPL active
+flash-qio: QIO @ 80 MHz enabled
+Trying to boot from NOR
+OpenSBI: ESP32-S31 firmware active
+
+
+U-Boot 2024.07 (Sep 23 2026 - 18:10:19 +0800)
+
+DRAM:  320 KiB (effective 16.3 MiB)
+Core:  7 devices, 6 uclasses, devicetree: board
+Loading Environment from nowhere... OK
+In:    serial@2038A000
+Out:   serial@2038A000
+Err:   serial@2038A000
+ESP32-S31 U-Boot active
+Hit any key to stop autoboot:  0 
+## Flattened Device Tree blob at 40200000
+   Booting using the fdt blob at 0x40200000
+ERROR: reserving fdt memory region failed (addr=2f040000 size=10000 flags=4)
+   Loading Device Tree to 50ffb000, end 50fff0f0 ... OK
+
+Starting kernel ...
+
+[    0.000000] Linux version 6.18.0 (root@DESKTOP-FB9LETT) (riscv32-buildroot-linux-musl-gcc.br_real (Buildroot 2025.02) 13.3.0, GNU ld (GNU Binutils) 2.43.1) #2 Wed Sep 23 20:21:21 CST 2026
+[    0.000000] Machine model: Espressif ESP32-S31 (minimal)
+[    0.000000] SBI specification v2.0 detected
+[    0.000000] SBI implementation ID=0x1 Version=0x10006
+[    0.000000] SBI TIME extension detected
+[    0.000000] SBI IPI extension detected
+[    0.000000] SBI RFENCE extension detected
+[    0.000000] SBI SRST extension detected
+[    0.000000] SBI DBCN extension detected
+[    0.000000] earlycon: sbi0 at I/O port 0x0 (options '')
+[    0.000000] printk: legacy bootconsole [sbi0] enabled
+[    0.000000] Reserved memory: created DMA memory pool at 0x2f040000, size 0 MiB
+[    0.000000] OF: reserved mem: initialized node dma-pool@2f040000, compatible id shared-dma-pool
+[    0.000000] OF: reserved mem: 0x2f040000..0x2f04ffff (64 KiB) nomap non-reusable dma-pool@2f040000
+[    0.000000] Zone ranges:
+[    0.000000]   Normal   [mem 0x0000000050000000-0x0000000050ffffff]
+[    0.000000] Movable zone start for each node
+[    0.000000] Early memory node ranges
+[    0.000000]   node   0: [mem 0x0000000050000000-0x0000000050ffffff]
+[    0.000000] Initmem setup node 0 [mem 0x0000000050000000-0x0000000050ffffff]
+[    0.000000] On node 0, zone Normal: 28672 pages in unavailable ranges
+[    0.000000] Failed to add a System RAM resource at 50000000
+[    0.000000] riscv: base ISA extensions acim
+[    0.000000] riscv: ELF capabilities acim
+[    0.000000] Ticket spinlock: enabled
+[    0.000000] Kernel command line: earlycon=sbi console=ttyS0 root=mtd:rootfs rootfstype=cramfs ro
+[    0.000000] printk: log buffer data + meta data: 16384 + 51200 = 67584 bytes
+[    0.000000] Dentry cache hash table entries: 2048 (order: 1, 8192 bytes, linear)
+[    0.000000] Inode-cache hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    0.000000] Built 1 zonelists, mobility grouping on.  Total pages: 4096
+[    0.000000] mem auto-init: stack:all(zero), heap alloc:off, heap free:off
+[    0.000000] SLUB: HWalign=64, Order=0-1, MinObjects=0, CPUs=1, Nodes=1
+[    0.000000] NR_IRQS: 64, nr_irqs: 64, preallocated irqs: 0
+[    0.000000] riscv-intc: 32 local interrupts mapped
+[    0.000000] esp-clic: 16 external slots (IDs 16-31), chained on /cpus/cpu@0/interrupt-controller
+[    0.000000] esp-intmtx: 128 sources, parent /soc/interrupt-controller@10a00000; 16 CLIC slots available
+[    0.000000] clocksource: riscv_clocksource: mask: 0xffffffffffffffff max_cycles: 0x49cd42e204, max_idle_ns: 440795202125 ns
+[    0.000000] clocksource: esp32s31-systimer: mask: 0xfffffffffffff max_cycles: 0x3b0a9be80, max_idle_ns: 440795202120 ns
+[    0.000014] sched_clock: 52 bits at 16MHz, resolution 62ns, wraps every 2199023255531ns
+[    0.008866] esp32s31-systimer: 16000000 Hz clocksource+clockevent, irq 1
+[    0.015273] Calibrating delay loop (skipped), value calculated using timer frequency.. 640.00 BogoMIPS (lpj=1280000)
+[    0.025309] pid_max: default: 4096 minimum: 301
+[    0.030991] Mount-cache hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    0.037352] Mountpoint-cache hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    0.062103] ASID allocator using 9 bits (512 entries)
+[    0.066694] Memory: 14772K/16384K available (2363K kernel code, 147K rwdata, 365K rodata, 132K init, 74K bss, 1372K reserved, 0K cma-reserved)
+[    0.075916] devtmpfs: initialized
+[    0.092263] DMA: default coherent area is set
+[    0.093111] clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 7645041785100000 ns
+[    0.096166] posixtimers hash table entries: 512 (order: 0, 2048 bytes, linear)
+[    0.103623] futex hash table entries: 16 (256 bytes on 1 NUMA nodes, total 0 KiB, linear).
+[    0.112069] pinctrl core: initialized pinctrl subsystem
+[    0.124768] NET: Registered PF_NETLINK/PF_ROUTE protocol family
+[    0.129188] esp32s31-cache: DMA cache ops registered via vendor SBI ecall
+[    0.159247] pps_core: LinuxPPS API ver. 1 registered
+[    0.159566] pps_core: Software ver. 5.3.6 - Copyright 2005-2007 Rodolfo Giometti <giometti@linux.it>
+[    0.163328] PTP clock support registered
+[    0.177234] clocksource: Switched to clocksource esp32s31-systimer
+[    0.216280] NET: Registered PF_INET protocol family
+[    0.219403] IP idents hash table entries: 2048 (order: 2, 16384 bytes, linear)
+[    0.224701] tcp_listen_portaddr_hash hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    0.226758] Table-perturb hash table entries: 65536 (order: 6, 262144 bytes, linear)
+[    0.234117] TCP established hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    0.241818] TCP bind hash table entries: 1024 (order: 1, 8192 bytes, linear)
+[    0.248792] TCP: Hash tables configured (established 1024 bind 1024)
+[    0.256365] UDP hash table entries: 256 (order: 0, 4096 bytes, linear)
+[    0.261830] UDP-Lite hash table entries: 256 (order: 0, 4096 bytes, linear)
+[    0.285844] workingset: timestamp_bits=30 max_order=12 bucket_order=0
+[    0.306038] esp32s31-pinctrl 20583000.pinctrl: registered 60 GPIOs with pinmux, matrix and IRQ support
+[    0.313864] esp32s31-clock 20587000.clock-controller: boot clocks: cpu=320000000 mem=160000000 sys=106666666 apb=53333333 Hz
+[    0.330339] esp32s31-pmu 20704000.power-controller: HPCNNT runtime power-off guarded, radio vote inactive; modem domains firmware-owned
+[    0.344476] 2038a000.serial: ttyS0 at MMIO 0x2038a000 (irq = 3, base_baud = 2500000) is a ESP32S3 UART
+[    0.345656] printk: legacy console [ttyS0] enabled
+[    0.345656] printk: legacy console [ttyS0] enabled
+[    0.352695] printk: legacy bootconsole [sbi0] disabled
+[    0.352695] printk: legacy bootconsole [sbi0] disabled
+[    0.374468] physmap-flash 40b00000.flash: physmap platform flash device: [mem 0x40b00000-0x40efffff]
+[    0.395008] stmmaceth 20350000.ethernet: IRQ eth_wake_irq not found
+[    0.395412] stmmaceth 20350000.ethernet: IRQ eth_lpi not found
+[    0.396276] stmmaceth 20350000.ethernet: IRQ sfty not found
+[    0.408050] stmmaceth 20350000.ethernet: User ID: 0x10, Synopsys ID: 0x37
+[    0.408786] stmmaceth 20350000.ethernet: 	DWMAC1000
+[    0.414097] stmmaceth 20350000.ethernet: DMA HW capability register supported
+[    0.420952] stmmaceth 20350000.ethernet: RX Checksum Offload Engine supported
+[    0.428090] stmmaceth 20350000.ethernet: COE Type 2
+[    0.433109] stmmaceth 20350000.ethernet: TX Checksum insertion supported
+[    0.439541] stmmaceth 20350000.ethernet: Wake-Up On Lan supported
+[    0.446768] stmmaceth 20350000.ethernet: Enhanced/Alternate descriptors
+[    0.452479] stmmaceth 20350000.ethernet: Enabled extended descriptors
+[    0.458727] stmmaceth 20350000.ethernet: Ring mode enabled
+[    0.464160] stmmaceth 20350000.ethernet: Enable RX Mitigation via HW Watchdog Timer
+[    0.472246] stmmaceth 20350000.ethernet: device MAC address 16:c1:86:b7:e5:eb
+[    0.666857] NET: Registered PF_INET6 protocol family
+[    0.684439] Segment Routing with IPv6
+[    0.686431] In-situ OAM (IOAM) with IPv6
+[    0.687394] sit: IPv6, IPv4 and MPLS over IPv4 tunneling driver
+[    0.695134] NET: Registered PF_PACKET protocol family
+[    0.711682] clk: Disabling unused clocks
+[    0.712330] PM: genpd: Disabling unused power domains
+[    0.716508] check access for rdinit=/init failed: -2, ignoring
+[    0.719603] cramfs: checking physical address 0x40b00000 for linear cramfs image
+[    0.723616] cramfs: linear cramfs image on mtd:rootfs appears to be 1316 KB in size
+[    0.731834] VFS: Mounted root (cramfs filesystem) readonly on device 31:0.
+[    0.739121] devtmpfs: mounted
+[    0.741893] Freeing unused kernel image (initmem) memory: 24K
+[    0.746566] This architecture does not have kernel memory protection.
+[    0.753053] Run /sbin/init as init process
+seedrng: can't create directory '/var/lib/seedrng': Read-only file system
+Starting syslogd: OK
+Starting klogd: OK
+Running sysctl: OK
+[    1.704392] stmmaceth 20350000.ethernet eth0: Register MEM_TYPE_PAGE_POOL RxQ-0
+[    1.765885] stmmaceth 20350000.ethernet eth0: PHY [stmmac-0:00] driver [YT8531 Gigabit Ethernet] (irq=POLL)
+[    1.933682] stmmaceth 20350000.ethernet eth0: No Safety Features support found
+[    1.934097] stmmaceth 20350000.ethernet eth0: No MAC Management Counters available
+[    2.001764] stmmaceth 20350000.ethernet eth0: IEEE 1588-2008 Advanced Timestamp supported
+[    2.008199] stmmaceth 20350000.ethernet eth0: registered PTP clock
+[    2.008591] stmmaceth 20350000.ethernet eth0: configuring for phy/rgmii-id link mode
+udhcpc: started, v1.37.0
+udhcpc: broadcasting discover
+
+
+udhcpc: broadcasting discover
+udhcpc: broadcasting discover
+udhcpc: no lease, forking to background
+Starting crond: OK
+crond[56]: crond (busybox 1.37.0) started, log level 8
+No persistent location to store SSH host keys. New keys will be
+generated at each boot. Are you sure this is what you want to do?
+Starting dropbear sshd: 

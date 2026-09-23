@@ -1,0 +1,75 @@
+uname -a
+Linux esp32s31 6.18.0 #1 Wed Sep 23 18:12:30 CST 2026 riscv32 GNU/Linux
+~ # 
+~ # cat /proc/cpuinfo
+processor	: 0
+hart		: 0
+isa		: rv32imac_zicsr_zifencei_zaamo_zalrsc_zca
+mmu		: sv32
+mvendorid	: 0x612
+marchid		: 0x80000003
+mimpid		: 0x1
+hart isa	: rv32imac_zicsr_zifencei_zaamo_zalrsc_zca
+
+~ # 
+~ # cat /proc/meminfo
+MemTotal:          15088 kB
+MemFree:           13604 kB
+MemAvailable:      13148 kB
+Buffers:               0 kB
+Cached:              540 kB
+SwapCached:            0 kB
+Active:              500 kB
+Inactive:            100 kB
+Active(anon):          4 kB
+Inactive(anon):       56 kB
+Active(file):        496 kB
+Inactive(file):       44 kB
+Unevictable:           0 kB
+Mlocked:               0 kB
+SwapTotal:             0 kB
+SwapFree:              0 kB
+Dirty:                 0 kB
+Writeback:             0 kB
+AnonPages:           112 kB
+Mapped:              496 kB
+Shmem:                 0 kB
+KReclaimable:          0 kB
+Slab:                392 kB
+SReclaimable:          0 kB
+SUnreclaim:          392 kB
+KernelStack:         136 kB
+PageTables:           56 kB
+SecPageTables:         0 kB
+NFS_Unstable:          0 kB
+Bounce:                0 kB
+WritebackTmp:          0 kB
+CommitLimit:        7544 kB
+Committed_AS:        488 kB
+VmallocTotal:     524288 kB
+VmallocUsed:          56 kB
+VmallocChunk:          0 kB
+Percpu:               32 kB
+Balloon:               0 kB
+~ # 
+~ # ls -l /
+total 6
+drwxr-xr-x    1 root     root          1396 Jan  1 00:00 bin
+drwxr-xr-x    2 root     root           340 Jan  1 00:00 dev
+drwxr-xr-x    1 root     root           388 Jan  1 00:00 etc
+drwxr-xr-x    1 root     root           192 Jan  1 00:00 lib
+lrwxrwxrwx    1 root     root             3 Jan  1 00:00 lib32 -> lib
+lrwxrwxrwx    1 root     root            11 Jan  1 00:00 linuxrc -> bin/busybox
+drwxr-xr-x    1 root     root             0 Jan  1 00:00 media
+drwxr-xr-x    1 root     root             0 Jan  1 00:00 mnt
+drwxr-xr-x    1 root     root             0 Jan  1 00:00 opt
+dr-xr-xr-x   54 root     root             0 Jan  1 00:00 proc
+drwx------    1 root     root             0 Jan  1 00:00 root
+drwxr-xr-x    2 root     root            40 Jan  1 00:00 run
+drwxr-xr-x    1 root     root          1060 Jan  1 00:00 sbin
+dr-xr-xr-x   11 root     root             0 Jan  1 00:00 sys
+drwxrwxrwt    2 root     root            40 Jan  1 00:00 tmp
+drwxr-xr-x    1 root     root            88 Jan  1 00:00 usr
+drwxr-xr-x    1 root     root           136 Jan  1 00:00 var
+~ # 
+~ # 

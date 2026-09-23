@@ -1,0 +1,3807 @@
+--- a/arch/riscv/boot/dts/espressif/esp32s31.dts
++++ b/arch/riscv/boot/dts/espressif/esp32s31.dts
+@@ -10,6 +10,11 @@
+ /dts-v1/;
+ 
+ #include <dt-bindings/interrupt-controller/irq.h>
++#include <dt-bindings/clock/esp32s31-clock.h>
++#include <dt-bindings/gpio/gpio.h>
++#include <dt-bindings/pinctrl/esp32s31-pinmux.h>
++#include <dt-bindings/power/esp32s31-power.h>
++#include <dt-bindings/reset/esp32s31-reset.h>
+ 
+ / {
+ 	compatible = "espressif,esp32s31";
+@@ -19,6 +24,7 @@
+ 
+ 	aliases {
+ 		serial0 = &uart0;
++		ethernet0 = &emac;
+ 	};
+ 
+ 	xtal_clk: clock-xtal {
+@@ -60,11 +66,25 @@
+ 		reg = <0x50000000 0x01000000>;
+ 	};
+ 
++	reserved-memory {
++		#address-cells = <1>;
++		#size-cells = <1>;
++		ranges;
++
++		/* S31 on-chip SRAM used only for coherent MAC DMA descriptors. */
++		gmac_dma_pool: dma-pool@2f040000 {
++			compatible = "shared-dma-pool";
++			reg = <0x2f040000 0x00010000>;
++			no-map;
++		};
++	};
++
+ 	soc {
+ 		compatible = "simple-bus";
+ 		#address-cells = <1>;
+ 		#size-cells = <1>;
+ 		ranges;
++		dma-noncoherent;
+ 
+ 		clic: interrupt-controller@10a00000 {
+ 			compatible = "espressif,esp32s31-clic";
+@@ -99,6 +119,111 @@
+ 			interrupt-parent = <&intmtx>;
+ 			interrupts = <33 IRQ_TYPE_LEVEL_HIGH>;
+ 			interrupt-names = "target0";
++		};
++
++
++		clkc: clock-controller@20587000 {
++			compatible = "espressif,esp32s31-clock";
++			reg = <0x20587000 0x1000>, <0x20586000 0x1000>,
++			      <0x20359000 0x1000>, <0x20589000 0x1000>,
++			      <0x20701000 0x1000>;
++			reg-names = "hp-sys-clkrst", "hp-system", "cnnt-sys",
++				    "hp-alive-sys", "lp-aon-clkrst";
++			#clock-cells = <1>;
++			#reset-cells = <1>;
++		};
++
++		pmu: power-controller@20704000 {
++			compatible = "espressif,esp32s31-pmu", "syscon";
++			reg = <0x20704000 0x1000>;
++			#power-domain-cells = <1>;
++		};
++
++		gpio: pinctrl@20583000 {
++			compatible = "espressif,esp32s31-pinctrl";
++			reg = <0x20583000 0x0e00>, <0x20582000 0x1000>,
++			      <0x20588000 0x1000>;
++			reg-names = "gpio", "iomux", "cnnt-pad-ctrl";
++			gpio-controller;
++			#gpio-cells = <2>;
++			gpio-reserved-ranges = <26 7>, <33 2>, <58 2>;
++			interrupt-controller;
++			#interrupt-cells = <2>;
++			interrupt-parent = <&intmtx>;
++			interrupts = <61 IRQ_TYPE_LEVEL_HIGH>;
++
++			emac_rgmii_default: emac-rgmii-default-pins {
++				smi-pins {
++					pinmux = <ESP32S31_MATRIX_OUT(5, 108, 0)>,
++						 <ESP32S31_MATRIX_OUT(6, 109, 0)>,
++						 <ESP32S31_MATRIX_IN(6, 107, 0)>;
++					bias-disable;
++					input-enable;
++					drive-strength = <20>;
++				};
++
++				tx-pins {
++					pinmux = <ESP32S31_IOMUX(8, 2)>,
++						 <ESP32S31_IOMUX(9, 2)>,
++						 <ESP32S31_IOMUX(10, 2)>,
++						 <ESP32S31_IOMUX(11, 2)>,
++						 <ESP32S31_IOMUX(12, 2)>,
++						 <ESP32S31_IOMUX(13, 2)>;
++					bias-disable;
++					drive-strength = <40>;
++				};
++
++				rx-pins {
++					pinmux = <ESP32S31_IOMUX_IN(14, 2, 184)>,
++						 <ESP32S31_IOMUX_IN(15, 2, 178)>,
++						 <ESP32S31_IOMUX_IN(16, 2, 182)>,
++						 <ESP32S31_IOMUX_IN(17, 2, 181)>,
++						 <ESP32S31_IOMUX_IN(18, 2, 180)>,
++						 <ESP32S31_IOMUX_IN(19, 2, 179)>;
++					bias-disable;
++					input-enable;
++				};
++			};
++		};
++
++		emac: ethernet@20350000 {
++			compatible = "espressif,esp32s31-gmac", "snps,dwmac";
++			reg = <0x20350000 0x2000>;
++			interrupt-parent = <&intmtx>;
++			interrupts = <98 IRQ_TYPE_LEVEL_HIGH>;
++			interrupt-names = "macirq";
++			clocks = <&clkc ESP32S31_CLK_EMAC_STMMACETH>,
++				 <&clkc ESP32S31_CLK_EMAC_PCLK>,
++				 <&clkc ESP32S31_CLK_EMAC_PTP_REF>,
++				 <&clkc ESP32S31_CLK_EMAC_RGMII_TXC>;
++			clock-names = "stmmaceth", "pclk", "ptp_ref", "tx";
++			resets = <&clkc ESP32S31_RST_EMAC>;
++			reset-names = "stmmaceth";
++			power-domains = <&pmu ESP32S31_PD_HPCNNT>;
++			pinctrl-names = "default";
++			pinctrl-0 = <&emac_rgmii_default>;
++			memory-region = <&gmac_dma_pool>;
++			phy-mode = "rgmii-id";
++			phy-handle = <&yt8531>;
++			max-speed = <1000>;
++			status = "okay";
++
++			mdio {
++				compatible = "snps,dwmac-mdio";
++				#address-cells = <1>;
++				#size-cells = <0>;
++
++				yt8531: ethernet-phy@0 {
++					compatible = "ethernet-phy-id4f51.e91b";
++					reg = <0>;
++					reset-gpios = <&gpio 7 GPIO_ACTIVE_LOW>;
++					reset-assert-us = <10000>;
++					reset-deassert-us = <100000>;
++					rx-internal-delay-ps = <1950>;
++					tx-internal-delay-ps = <1950>;
++					motorcomm,auto-sleep-disabled;
++				};
++			};
+ 		};
+ 
+ 		rootflash: flash@40b00000 {
+--- a/drivers/clk/Kconfig
++++ b/drivers/clk/Kconfig
+@@ -584,3 +584,9 @@
+ 	  Kunit test for the clk-fractional-divider type.
+ 
+ endif
++
++config ESP32S31_CLOCK
++	bool "Clock and reset driver for Espressif ESP32-S31"
++	depends on COMMON_CLK && RISCV && OF && HAS_IOMEM
++	help
++	  Clock/reset control for the ESP32-S31 peripheral gates and GMAC clocks.
+--- a/drivers/clk/Makefile
++++ b/drivers/clk/Makefile
+@@ -169,3 +169,5 @@
+ obj-y					+= xilinx/
+ obj-$(CONFIG_ARCH_ZYNQ)			+= zynq/
+ obj-$(CONFIG_COMMON_CLK_ZYNQMP)         += zynqmp/
++
++obj-$(CONFIG_ESP32S31_CLOCK) += clk-esp32s31.o
+--- a/drivers/pinctrl/Kconfig
++++ b/drivers/pinctrl/Kconfig
+@@ -714,3 +714,13 @@
+ source "drivers/pinctrl/vt8500/Kconfig"
+ 
+ endif
++
++config PINCTRL_ESP32S31
++	bool "Espressif ESP32-S31 pinctrl and GPIO controller"
++	depends on PINCTRL && GPIOLIB && OF && RISCV
++	select GPIOLIB_IRQCHIP
++	select GENERIC_PINCTRL_GROUPS
++	select GENERIC_PINMUX_FUNCTIONS
++	select GENERIC_PINCONF
++	help
++	  GPIO, IO_MUX, and GPIO-matrix support for ESP32-S31.
+--- a/drivers/pinctrl/Makefile
++++ b/drivers/pinctrl/Makefile
+@@ -95,3 +95,5 @@
+ obj-$(CONFIG_PINCTRL_UNIPHIER)	+= uniphier/
+ obj-$(CONFIG_PINCTRL_VISCONTI)	+= visconti/
+ obj-$(CONFIG_ARCH_VT8500)	+= vt8500/
++
++obj-$(CONFIG_PINCTRL_ESP32S31) += pinctrl-esp32s31.o
+--- a/drivers/pmdomain/Kconfig
++++ b/drivers/pmdomain/Kconfig
+@@ -22,3 +22,10 @@
+ source "drivers/pmdomain/xilinx/Kconfig"
+ 
+ endmenu
++
++config ESP32S31_PMU
++	bool "Espressif ESP32-S31 connectivity power domain"
++	depends on PM && OF && RISCV
++	select PM_GENERIC_DOMAINS
++	help
++	  Power-domain provider for the ESP32-S31 HPCNNT connectivity domain.
+--- a/drivers/pmdomain/Makefile
++++ b/drivers/pmdomain/Makefile
+@@ -19,3 +19,5 @@
+ obj-y					+= ti/
+ obj-y					+= xilinx/
+ obj-y					+= core.o governor.o
++
++obj-$(CONFIG_ESP32S31_PMU) += esp32s31-pmu.o
+--- /dev/null
++++ b/drivers/clk/clk-esp32s31.c
+@@ -0,0 +1,1825 @@
++// SPDX-License-Identifier: GPL-2.0-only
++/*
++ * ESP32-S31 peripheral clock/reset controller.
++ *
++ * This owns every gate, reset and connectivity-domain clock needed by the
++ * Linux UART, SDMMC and GMAC drivers.  PLL programming is kept fixed because
++ * the CPU, flash XIP and PSRAM need those PLLs before Linux can execute.
++ */
++
++#include <linux/bitfield.h>
++#include <linux/clk.h>
++#include <linux/clk-provider.h>
++#include <linux/delay.h>
++#include <linux/io.h>
++#include <linux/math64.h>
++#include <linux/module.h>
++#include <linux/of.h>
++#include <linux/platform_device.h>
++#include <linux/rational.h>
++#include <linux/reboot.h>
++#include <linux/reset-controller.h>
++#include <linux/spinlock.h>
++#include <linux/sysfs.h>
++
++#include <dt-bindings/clock/esp32s31-clock.h>
++#include <dt-bindings/reset/esp32s31-reset.h>
++
++#define ESP32S31_XTAL_RATE		40000000UL
++#define ESP32S31_RC_FAST_RATE		17500000UL
++#define ESP32S31_RC_SLOW_RATE		136000UL
++#define ESP32S31_XTAL32K_RATE		32768UL
++#define ESP32S31_BBPLL_RATE		480000000UL
++#define ESP32S31_GPSPI_RATE		80000000UL
++#define ESP32S31_SDMMC_CIU_RATE		10000000UL
++
++#define HP_SOC_CLK_SEL			0x00
++#define HP_CPU_FREQ_CTRL0		0x04
++#define HP_MEM_FREQ_CTRL0		0x08
++#define HP_SYS_FREQ_CTRL0		0x0c
++#define HP_APB_FREQ_CTRL0		0x10
++#define HP_ROOT_CLK_CTRL0		0x14
++#define HP_REF_500M_CTRL0		0x178
++#define HP_REF_240M_CTRL0		0x17c
++#define HP_REF_160M_CTRL0		0x180
++#define HP_REF_120M_CTRL0		0x184
++#define HP_REF_80M_CTRL0		0x188
++#define HP_REF_60M_CTRL0		0x18c
++#define HP_REF_20M_CTRL0		0x190
++#define HP_REF_50M_CTRL0		0x194
++#define HP_REF_25M_CTRL0		0x198
++
++#define HP_SOC_CLK_SEL_MASK		GENMASK(1, 0)
++#define HP_CLK_DIV_NUM			GENMASK(7, 0)
++#define HP_CLK_DIV_NUMERATOR		GENMASK(10, 8)
++#define HP_CLK_DIV_DENOMINATOR		GENMASK(13, 11)
++#define HP_SOC_CLK_UPDATE		BIT(0)
++
++#define LP_HP_CLK_CTRL			0x48
++#define LP_CPLL_DIV			0x4c
++#define LP_APLL_DIV			0x50
++#define LP_MPLL_DIV			0x54
++#define LP_APLL_SDM			0x64
++
++#define LP_XTAL_FREQ_MHZ		GENMASK(6, 0)
++#define LP_CPLL_REF_DIV			GENMASK(3, 0)
++#define LP_CPLL_FB_DIV			GENMASK(11, 4)
++#define LP_APLL_OUT_DIV			GENMASK(7, 3)
++#define LP_MPLL_FB_DIV			GENMASK(7, 3)
++#define LP_APLL_SDM_MASK		GENMASK(21, 0)
++
++#define HP_REF_CLK_DIV_NUM		GENMASK(7, 0)
++
++#define HP_SDIO_HOST_CTRL0		0xc0
++#define HP_SDIO_HOST_FUNC_CTRL0		0xc4
++#define HP_EMAC_CTRL0			0xc8
++#define HP_UART0_CTRL0			0x88
++#define HP_UART_CTRL_STRIDE		0x04
++#define HP_GPSPI2_CTRL0			0x6c
++#define HP_GPSPI_CTRL_STRIDE		0x04
++#define HP_I2S0_APB_CTRL0		0xe4
++#define HP_I2S_CTRL_STRIDE		0x14
++#define HP_I2S0_RX_CTRL0		0xe8
++#define HP_I2S0_RX_DIV_CTRL0		0xec
++#define HP_I2S0_TX_CTRL0		0xf0
++#define HP_I2S0_TX_DIV_CTRL0		0xf4
++#define HP_TWAI0_CTRL0			0x10c
++#define HP_TWAI_CTRL_STRIDE		0x04
++#define HP_TIMERGRP1_CTRL0		0x11c
++
++#define HP_SDMMC_SYS_CLK_EN		BIT(0)
++#define HP_SDIO_LS_CLK_SRC_SEL		BIT(2)
++#define HP_SDIO_LS_CLK_EN		BIT(3)
++#define HP_SDIO_LS_CLK_DIV_NUM		GENMASK(11, 4)
++
++#define HP_SDIO_EDGE_UPDATE		BIT(0)
++#define HP_SDIO_EDGE_L			GENMASK(4, 1)
++#define HP_SDIO_EDGE_H			GENMASK(8, 5)
++#define HP_SDIO_EDGE_N			GENMASK(12, 9)
++#define HP_SDIO_SLF_CLK_EDGE_SEL	GENMASK(15, 13)
++#define HP_SDIO_DRV_CLK_EDGE_SEL	GENMASK(18, 16)
++#define HP_SDIO_SAM_CLK_EDGE_SEL	GENMASK(21, 19)
++#define HP_SDIO_SLF_CLK_EN		BIT(22)
++#define HP_SDIO_DRV_CLK_EN		BIT(23)
++#define HP_SDIO_SAM_CLK_EN		BIT(24)
++
++#define HP_EMAC_SYS_CLK_EN		BIT(0)
++
++#define HP_UART_SYS_CLK_EN		BIT(0)
++#define HP_UART_APB_CLK_EN		BIT(1)
++#define HP_UART_CORE_RST_EN		BIT(2)
++#define HP_UART_APB_RST_EN		BIT(3)
++#define HP_UART_FORCE_NORST		BIT(4)
++#define HP_UART_CLK_SRC_SEL		GENMASK(6, 5)
++#define HP_UART_CLK_EN			BIT(7)
++#define HP_UART_SCLK_DIV_NUM		GENMASK(15, 8)
++#define HP_UART_SCLK_DIV_NUMERATOR	GENMASK(23, 16)
++#define HP_UART_SCLK_DIV_DENOMINATOR	GENMASK(31, 24)
++
++#define HP_GPSPI_SYS_CLK_EN		BIT(0)
++#define HP_GPSPI_APB_CLK_EN		BIT(1)
++#define HP_GPSPI_RST_EN			BIT(2)
++#define HP_GPSPI_FORCE_NORST		BIT(3)
++#define HP_GPSPI_CLK_SRC_SEL		GENMASK(5, 4)
++#define HP_GPSPI_HS_CLK_EN		BIT(6)
++#define HP_GPSPI_HS_CLK_DIV_NUM		GENMASK(14, 7)
++#define HP_GPSPI_MST_CLK_DIV_NUM	GENMASK(22, 15)
++#define HP_GPSPI_MST_CLK_EN		BIT(23)
++
++#define HP_I2S_APB_CLK_EN		BIT(0)
++#define HP_I2S_APB_RST_EN		BIT(1)
++#define HP_I2S_FORCE_NORST		BIT(2)
++#define HP_I2S_CORE_CLK_EN		BIT(0)
++#define HP_I2S_CORE_CLK_SRC_SEL		GENMASK(2, 1)
++#define HP_I2S_CORE_DIV_N		GENMASK(10, 3)
++#define HP_I2S_MST_CLK_SEL		BIT(11)
++#define HP_I2S_DIV_X			GENMASK(8, 0)
++#define HP_I2S_DIV_Y			GENMASK(17, 9)
++#define HP_I2S_DIV_Z			GENMASK(26, 18)
++#define HP_I2S_DIV_YN1			BIT(27)
++
++#define HP_ALIVE_PAD_I2S0_CTRL		0x08
++#define HP_ALIVE_PAD_I2S_STRIDE		0x04
++#define HP_ALIVE_PAD_I2S_MCLK_EN	BIT(31)
++
++#define HP_TWAI_APB_CLK_EN		BIT(0)
++#define HP_TWAI_CLK_SRC_SEL		GENMASK(2, 1)
++#define HP_TWAI_CLK_EN			BIT(3)
++#define HP_TWAI_RST_EN			BIT(4)
++#define HP_TWAI_FORCE_NORST		BIT(5)
++
++#define HP_TIMERGRP_APB_CLK_EN		BIT(0)
++#define HP_TIMERGRP_RST_EN		BIT(1)
++#define HP_TIMERGRP_FORCE_NORST		BIT(2)
++#define HP_TIMERGRP_WDT_SRC_SEL		GENMASK(10, 9)
++#define HP_TIMERGRP_WDT_CLK_EN		BIT(11)
++
++#define HP_SYS_UART_MEM_LP_CTRL0		0x28c
++#define HP_SYS_UART_MEM_LP_STRIDE	0x04
++#define HP_SYS_UART3_MEM_LP_CTRL		0x1f0
++#define HP_SYS_UART_MEM_LP_EN		BIT(2)
++#define HP_SYS_UART_MEM_FORCE_CTRL	BIT(3)
++#define HP_SYS_TWAI0_MEM_LP_CTRL		0x228
++#define HP_SYS_TWAI1_MEM_LP_CTRL		0x2a4
++#define HP_SYS_TWAI_MEM_LP_EN		BIT(2)
++#define HP_SYS_TWAI_MEM_FORCE_CTRL	BIT(3)
++
++#define CNNT_CLK_EN			0x00
++#define CNNT_SYS_SDMMC_MEM_LP_CTRL	0x10
++#define CNNT_SYS_GMAC_MEM_LP_CTRL	0x1c
++#define CNNT_SYS_HP_SDMMC_CTRL		0x38
++#define CNNT_SYS_HP_EMAC_CTRL		0x3c
++#define CNNT_SYS_HP_EMAC_REF_CTRL	0x40
++#define CNNT_SYS_HP_EMAC_RMII_PAD_CTRL	0x44
++#define CNNT_SYS_HP_EMAC_RMII_CTRL	0x48
++#define CNNT_SYS_HP_EMAC_RX_CTRL		0x4c
++#define CNNT_SYS_HP_EMAC_TX_CTRL		0x50
++#define CNNT_SYS_HP_EMAC_PTP_CTRL	0x54
++#define CNNT_SYS_GMAC_CTRL0		0x60
++
++#define CNNT_SYS_CLK_EN			BIT(31)
++#define CNNT_MEM_LP_EN			BIT(2)
++#define CNNT_MEM_LP_FORCE_CTRL		BIT(3)
++
++#define CNNT_SDMMC_AHB2AXI_POST_WRITE_EN BIT(29)
++#define CNNT_SDMMC_RST_EN		BIT(30)
++#define CNNT_SDMMC_FORCE_NORST		BIT(31)
++
++#define CNNT_EMAC_USELESS_CLK_EN	BIT(0)
++#define CNNT_EMAC_RST_EN		BIT(1)
++#define CNNT_EMAC_FORCE_NORST		BIT(2)
++
++#define CNNT_EMAC_REF_CLK_SEL		GENMASK(1, 0)
++#define CNNT_EMAC_REF_CLK_EN		BIT(2)
++#define CNNT_EMAC_REF_CLK_DIV		GENMASK(15, 8)
++
++#define CNNT_EMAC_PTP_REF_CLK_EN	BIT(0)
++#define CNNT_EMAC_PTP_REF_CLK_SEL	BIT(1)
++
++#define CNNT_EMAC_RMII_PAD_CLK_EN	BIT(1)
++#define CNNT_EMAC_RMII_CLK_EN		BIT(1)
++#define CNNT_EMAC_RMII_PAD_OUT_CLK_EN	BIT(2)
++#define CNNT_EMAC_RX_PAD_CLK_EN		BIT(0)
++#define CNNT_EMAC_RX_CLK_SEL		BIT(2)
++#define CNNT_EMAC_RX_180_CLK_EN		BIT(3)
++#define CNNT_EMAC_TX_180_CLK_EN		BIT(3)
++
++#define CNNT_PHY_INTF_SEL		GENMASK(4, 2)
++#define CNNT_PHY_INTF_RGMII		1
++#define CNNT_GMAC_MEM_CLK_FORCE_ON	BIT(5)
++#define CNNT_GMAC_APB_POSTW_EN		BIT(11)
++
++struct esp32s31_clk_priv {
++	void __iomem *hp;
++	void __iomem *hp_sys;
++	void __iomem *cnnt;
++	void __iomem *hp_alive;
++	void __iomem *lp_aon;
++	spinlock_t lock;
++	struct clk_hw_onecell_data *onecell;
++	struct reset_controller_dev rcdev;
++	bool sdmmc_initialized;
++	bool emac_initialized;
++	bool uart_initialized[4];
++	bool twai_initialized[2];
++	bool gpspi_initialized[2];
++	bool i2s_initialized[2];
++	unsigned int sdmmc_users;
++	unsigned int emac_users;
++};
++
++enum esp32s31_clk_kind {
++	ESP32S31_CLK_KIND_FIXED,
++	ESP32S31_CLK_KIND_XTAL,
++	ESP32S31_CLK_KIND_CPLL,
++	ESP32S31_CLK_KIND_MPLL,
++	ESP32S31_CLK_KIND_APLL,
++	ESP32S31_CLK_KIND_CPU,
++	ESP32S31_CLK_KIND_MEM,
++	ESP32S31_CLK_KIND_SYS,
++	ESP32S31_CLK_KIND_APB,
++	ESP32S31_CLK_KIND_PLL_DIV,
++	ESP32S31_CLK_KIND_SDMMC_BIU,
++	ESP32S31_CLK_KIND_SDMMC_CIU,
++	ESP32S31_CLK_KIND_EMAC_BUS,
++	ESP32S31_CLK_KIND_EMAC_PTP,
++	ESP32S31_CLK_KIND_EMAC_TXC,
++	ESP32S31_CLK_KIND_UART0,
++	ESP32S31_CLK_KIND_UART1,
++	ESP32S31_CLK_KIND_UART2,
++	ESP32S31_CLK_KIND_UART3,
++	ESP32S31_CLK_KIND_GPSPI2,
++	ESP32S31_CLK_KIND_GPSPI3,
++	ESP32S31_CLK_KIND_I2S0,
++	ESP32S31_CLK_KIND_I2S1,
++	ESP32S31_CLK_KIND_TWAI0,
++	ESP32S31_CLK_KIND_TWAI1,
++	ESP32S31_CLK_KIND_WDT1,
++	ESP32S31_CLK_KIND_GENERIC,
++};
++
++struct esp32s31_clk {
++	struct clk_hw hw;
++	struct esp32s31_clk_priv *priv;
++	enum esp32s31_clk_kind kind;
++	unsigned long fixed_rate;
++	u16 reg;
++	u32 enable_mask;
++	u32 reset_mask;
++	u32 force_norst_mask;
++	bool initialized;
++};
++
++enum esp32s31_reg_bank {
++	ESP32S31_BANK_HP,
++	ESP32S31_BANK_CNNT,
++};
++
++struct esp32s31_reset_desc {
++	u16 reg;
++	u32 reset_mask;
++	u32 force_norst_mask;
++	u8 bank;
++};
++
++#define to_esp32s31_clk(_hw) container_of(_hw, struct esp32s31_clk, hw)
++
++static void esp32s31_rmw(void __iomem *base, u32 off, u32 clr, u32 set)
++{
++	u32 val = readl(base + off);
++
++	val &= ~clr;
++	val |= set;
++	writel(val, base + off);
++}
++
++static const struct esp32s31_reset_desc esp32s31_resets[ESP32S31_RST_NR] = {
++	[ESP32S31_RST_SDMMC] = { CNNT_SYS_HP_SDMMC_CTRL,
++		CNNT_SDMMC_RST_EN, CNNT_SDMMC_FORCE_NORST, ESP32S31_BANK_CNNT },
++	[ESP32S31_RST_EMAC] = { CNNT_SYS_HP_EMAC_CTRL,
++		CNNT_EMAC_RST_EN, CNNT_EMAC_FORCE_NORST, ESP32S31_BANK_CNNT },
++	[ESP32S31_RST_UART0] = { HP_UART0_CTRL0,
++		HP_UART_CORE_RST_EN | HP_UART_APB_RST_EN, HP_UART_FORCE_NORST,
++		ESP32S31_BANK_HP },
++	[ESP32S31_RST_UART1] = { HP_UART0_CTRL0 + HP_UART_CTRL_STRIDE,
++		HP_UART_CORE_RST_EN | HP_UART_APB_RST_EN, HP_UART_FORCE_NORST,
++		ESP32S31_BANK_HP },
++	[ESP32S31_RST_UART2] = { HP_UART0_CTRL0 + 2 * HP_UART_CTRL_STRIDE,
++		HP_UART_CORE_RST_EN | HP_UART_APB_RST_EN, HP_UART_FORCE_NORST,
++		ESP32S31_BANK_HP },
++	[ESP32S31_RST_UART3] = { HP_UART0_CTRL0 + 3 * HP_UART_CTRL_STRIDE,
++		HP_UART_CORE_RST_EN | HP_UART_APB_RST_EN, HP_UART_FORCE_NORST,
++		ESP32S31_BANK_HP },
++	[ESP32S31_RST_WDT0] = { 0x114, BIT(1), BIT(2), ESP32S31_BANK_HP },
++	[ESP32S31_RST_WDT1] = { HP_TIMERGRP1_CTRL0, HP_TIMERGRP_RST_EN,
++		HP_TIMERGRP_FORCE_NORST, ESP32S31_BANK_HP },
++	[ESP32S31_RST_SYSTIMER] = { 0x120, BIT(1), BIT(2), ESP32S31_BANK_HP },
++	[ESP32S31_RST_AHB_GDMA] = { 0x7c, BIT(1), BIT(2), ESP32S31_BANK_HP },
++	[ESP32S31_RST_UHCI] = { 0x84, BIT(2), BIT(3), ESP32S31_BANK_HP },
++	[ESP32S31_RST_LEDC0] = { 0x148, BIT(1), BIT(2), ESP32S31_BANK_HP },
++	[ESP32S31_RST_LEDC1] = { 0x148, BIT(7), BIT(8), ESP32S31_BANK_HP },
++	[ESP32S31_RST_MCPWM0] = { 0x124, BIT(1), BIT(2), ESP32S31_BANK_HP },
++	[ESP32S31_RST_MCPWM1] = { 0x128, BIT(1), BIT(2), ESP32S31_BANK_HP },
++	[ESP32S31_RST_MCPWM2] = { 0x12c, BIT(1), BIT(2), ESP32S31_BANK_HP },
++	[ESP32S31_RST_MCPWM3] = { 0x130, BIT(1), BIT(2), ESP32S31_BANK_HP },
++	[ESP32S31_RST_PCNT0] = { 0x138, BIT(1), BIT(2), ESP32S31_BANK_HP },
++	[ESP32S31_RST_PCNT1] = { 0x138, BIT(4), BIT(5), ESP32S31_BANK_HP },
++	[ESP32S31_RST_I2C0] = { 0xdc, BIT(1), BIT(2), ESP32S31_BANK_HP },
++	[ESP32S31_RST_I2C1] = { 0xe0, BIT(1), BIT(2), ESP32S31_BANK_HP },
++	[ESP32S31_RST_TWAI0] = { HP_TWAI0_CTRL0, HP_TWAI_RST_EN,
++		HP_TWAI_FORCE_NORST, ESP32S31_BANK_HP },
++	[ESP32S31_RST_TWAI1] = { HP_TWAI0_CTRL0 + HP_TWAI_CTRL_STRIDE,
++		HP_TWAI_RST_EN, HP_TWAI_FORCE_NORST, ESP32S31_BANK_HP },
++	[ESP32S31_RST_GPSPI2] = { HP_GPSPI2_CTRL0, HP_GPSPI_RST_EN,
++		HP_GPSPI_FORCE_NORST, ESP32S31_BANK_HP },
++	[ESP32S31_RST_GPSPI3] = { HP_GPSPI2_CTRL0 + HP_GPSPI_CTRL_STRIDE,
++		HP_GPSPI_RST_EN, HP_GPSPI_FORCE_NORST, ESP32S31_BANK_HP },
++	[ESP32S31_RST_I2S0] = { HP_I2S0_APB_CTRL0, HP_I2S_APB_RST_EN,
++		HP_I2S_FORCE_NORST, ESP32S31_BANK_HP },
++	[ESP32S31_RST_I2S1] = { HP_I2S0_APB_CTRL0 + HP_I2S_CTRL_STRIDE,
++		HP_I2S_APB_RST_EN, HP_I2S_FORCE_NORST, ESP32S31_BANK_HP },
++};
++
++static void __iomem *esp32s31_reset_base(struct esp32s31_clk_priv *priv,
++					 const struct esp32s31_reset_desc *desc)
++{
++	return desc->bank == ESP32S31_BANK_CNNT ? priv->cnnt : priv->hp;
++}
++
++static int esp32s31_reset_assert(struct reset_controller_dev *rcdev,
++				unsigned long id)
++{
++	struct esp32s31_clk_priv *priv =
++		container_of(rcdev, struct esp32s31_clk_priv, rcdev);
++	const struct esp32s31_reset_desc *desc;
++	unsigned long flags;
++
++	if (id >= ARRAY_SIZE(esp32s31_resets))
++		return -EINVAL;
++	desc = &esp32s31_resets[id];
++
++	spin_lock_irqsave(&priv->lock, flags);
++	esp32s31_rmw(esp32s31_reset_base(priv, desc), desc->reg,
++		      desc->force_norst_mask, desc->reset_mask);
++	spin_unlock_irqrestore(&priv->lock, flags);
++
++	return 0;
++}
++
++static int esp32s31_reset_deassert(struct reset_controller_dev *rcdev,
++				  unsigned long id)
++{
++	struct esp32s31_clk_priv *priv =
++		container_of(rcdev, struct esp32s31_clk_priv, rcdev);
++	const struct esp32s31_reset_desc *desc;
++	unsigned long flags;
++
++	if (id >= ARRAY_SIZE(esp32s31_resets))
++		return -EINVAL;
++	desc = &esp32s31_resets[id];
++
++	spin_lock_irqsave(&priv->lock, flags);
++	esp32s31_rmw(esp32s31_reset_base(priv, desc), desc->reg,
++		      desc->reset_mask, desc->force_norst_mask);
++	spin_unlock_irqrestore(&priv->lock, flags);
++
++	return 0;
++}
++
++static int esp32s31_reset(struct reset_controller_dev *rcdev,
++			 unsigned long id)
++{
++	struct esp32s31_clk_priv *priv =
++		container_of(rcdev, struct esp32s31_clk_priv, rcdev);
++	const struct esp32s31_reset_desc *desc;
++	void __iomem *base;
++	unsigned long flags;
++
++	if (id >= ARRAY_SIZE(esp32s31_resets))
++		return -EINVAL;
++	desc = &esp32s31_resets[id];
++	base = esp32s31_reset_base(priv, desc);
++
++	/* Match the IDF peripheral reset pulse: assert, then release. */
++	spin_lock_irqsave(&priv->lock, flags);
++	esp32s31_rmw(base, desc->reg, desc->force_norst_mask,
++		      desc->reset_mask);
++	esp32s31_rmw(base, desc->reg, desc->reset_mask,
++		      desc->force_norst_mask);
++	readl(base + desc->reg);
++	spin_unlock_irqrestore(&priv->lock, flags);
++
++	return 0;
++}
++
++static int esp32s31_reset_status(struct reset_controller_dev *rcdev,
++				unsigned long id)
++{
++	struct esp32s31_clk_priv *priv =
++		container_of(rcdev, struct esp32s31_clk_priv, rcdev);
++	const struct esp32s31_reset_desc *desc;
++
++	if (id >= ARRAY_SIZE(esp32s31_resets))
++		return -EINVAL;
++	desc = &esp32s31_resets[id];
++
++	return !!(readl(esp32s31_reset_base(priv, desc) + desc->reg) &
++		  desc->reset_mask);
++}
++
++static const struct reset_control_ops esp32s31_reset_ops = {
++	.reset = esp32s31_reset,
++	.assert = esp32s31_reset_assert,
++	.deassert = esp32s31_reset_deassert,
++	.status = esp32s31_reset_status,
++};
++
++static void esp32s31_sdmmc_prepare(struct esp32s31_clk_priv *priv)
++{
++	u32 val;
++
++	esp32s31_rmw(priv->cnnt, CNNT_CLK_EN, 0, CNNT_SYS_CLK_EN);
++	esp32s31_rmw(priv->cnnt, CNNT_SYS_SDMMC_MEM_LP_CTRL,
++		     CNNT_MEM_LP_EN, CNNT_MEM_LP_FORCE_CTRL);
++
++	esp32s31_rmw(priv->hp, HP_SDIO_HOST_CTRL0,
++		     HP_SDIO_LS_CLK_SRC_SEL, HP_SDMMC_SYS_CLK_EN |
++		     HP_SDIO_LS_CLK_EN | FIELD_PREP(HP_SDIO_LS_CLK_DIV_NUM, 7));
++
++	val = FIELD_PREP(HP_SDIO_EDGE_H, 3) |
++	      FIELD_PREP(HP_SDIO_EDGE_N, 7) |
++	      FIELD_PREP(HP_SDIO_EDGE_L, 7) |
++	      FIELD_PREP(HP_SDIO_DRV_CLK_EDGE_SEL, 1) |
++	      HP_SDIO_SLF_CLK_EN | HP_SDIO_DRV_CLK_EN | HP_SDIO_SAM_CLK_EN;
++	writel(val | HP_SDIO_EDGE_UPDATE, priv->hp + HP_SDIO_HOST_FUNC_CTRL0);
++	writel(val, priv->hp + HP_SDIO_HOST_FUNC_CTRL0);
++
++	esp32s31_rmw(priv->cnnt, CNNT_SYS_HP_SDMMC_CTRL, 0,
++		     CNNT_SDMMC_AHB2AXI_POST_WRITE_EN | CNNT_SDMMC_FORCE_NORST);
++	esp32s31_rmw(priv->cnnt, CNNT_SYS_HP_SDMMC_CTRL, CNNT_SDMMC_RST_EN, 0);
++}
++
++static void esp32s31_emac_prepare(struct esp32s31_clk_priv *priv)
++{
++	esp32s31_rmw(priv->cnnt, CNNT_CLK_EN, 0, CNNT_SYS_CLK_EN);
++	esp32s31_rmw(priv->cnnt, CNNT_SYS_GMAC_MEM_LP_CTRL,
++		     CNNT_MEM_LP_EN, CNNT_MEM_LP_FORCE_CTRL);
++	esp32s31_rmw(priv->hp, HP_EMAC_CTRL0, 0, HP_EMAC_SYS_CLK_EN);
++	esp32s31_rmw(priv->cnnt, CNNT_SYS_GMAC_CTRL0,
++		     CNNT_PHY_INTF_SEL,
++		     FIELD_PREP(CNNT_PHY_INTF_SEL, CNNT_PHY_INTF_RGMII) |
++		     CNNT_GMAC_MEM_CLK_FORCE_ON | CNNT_GMAC_APB_POSTW_EN);
++	esp32s31_rmw(priv->cnnt, CNNT_SYS_HP_EMAC_CTRL, 0,
++		     CNNT_EMAC_USELESS_CLK_EN | CNNT_EMAC_FORCE_NORST);
++	esp32s31_rmw(priv->cnnt, CNNT_SYS_HP_EMAC_CTRL, CNNT_EMAC_RST_EN, 0);
++
++	/* IDF's native RGMII clock path: MPLL/4 TXC and pad-sourced RXC. */
++	esp32s31_rmw(priv->cnnt, CNNT_SYS_HP_EMAC_REF_CTRL,
++		     CNNT_EMAC_REF_CLK_SEL | CNNT_EMAC_REF_CLK_DIV,
++		     CNNT_EMAC_REF_CLK_EN |
++		     FIELD_PREP(CNNT_EMAC_REF_CLK_DIV, 3));
++	esp32s31_rmw(priv->cnnt, CNNT_SYS_HP_EMAC_RMII_PAD_CTRL,
++		     CNNT_EMAC_RMII_PAD_CLK_EN, 0);
++	esp32s31_rmw(priv->cnnt, CNNT_SYS_HP_EMAC_RMII_CTRL,
++		     CNNT_EMAC_RMII_CLK_EN,
++		     CNNT_EMAC_RMII_PAD_OUT_CLK_EN);
++	esp32s31_rmw(priv->cnnt, CNNT_SYS_HP_EMAC_RX_CTRL, 0,
++		     CNNT_EMAC_RX_PAD_CLK_EN | CNNT_EMAC_RX_CLK_SEL |
++		     CNNT_EMAC_RX_180_CLK_EN);
++	esp32s31_rmw(priv->cnnt, CNNT_SYS_HP_EMAC_TX_CTRL, 0,
++		     CNNT_EMAC_TX_180_CLK_EN);
++	esp32s31_rmw(priv->cnnt, CNNT_SYS_HP_EMAC_PTP_CTRL,
++		     CNNT_EMAC_PTP_REF_CLK_SEL, CNNT_EMAC_PTP_REF_CLK_EN);
++}
++
++static void esp32s31_uart_prepare(struct esp32s31_clk_priv *priv,
++				  unsigned int port)
++{
++	u32 reg = HP_UART0_CTRL0 + port * HP_UART_CTRL_STRIDE;
++	u32 mem_reg = port == 3 ? HP_SYS_UART3_MEM_LP_CTRL :
++		      HP_SYS_UART_MEM_LP_CTRL0 +
++		      port * HP_SYS_UART_MEM_LP_STRIDE;
++	u32 mask = HP_UART_SYS_CLK_EN | HP_UART_APB_CLK_EN |
++		   HP_UART_CORE_RST_EN | HP_UART_APB_RST_EN |
++		   HP_UART_FORCE_NORST | HP_UART_CLK_SRC_SEL |
++		   HP_UART_CLK_EN | HP_UART_SCLK_DIV_NUM |
++		   HP_UART_SCLK_DIV_NUMERATOR |
++		   HP_UART_SCLK_DIV_DENOMINATOR;
++	u32 val = HP_UART_SYS_CLK_EN | HP_UART_APB_CLK_EN |
++		  HP_UART_FORCE_NORST | HP_UART_CLK_EN;
++
++	/* XTAL source, integer divide by one. Reset is consumer-controlled. */
++	esp32s31_rmw(priv->hp, reg, mask, val);
++
++	/* UART1/2/3 FIFO SRAM powers up disabled; UART3 has a non-linear
++	 * power-control register. Force the selected block on while in use.
++	 */
++	esp32s31_rmw(priv->hp_sys, mem_reg,
++		     HP_SYS_UART_MEM_LP_EN | HP_SYS_UART_MEM_FORCE_CTRL,
++		     HP_SYS_UART_MEM_FORCE_CTRL);
++}
++
++static void esp32s31_wdt1_prepare(struct esp32s31_clk_priv *priv)
++{
++	/* IDF default watchdog source is XTAL (source selector 0). */
++	esp32s31_rmw(priv->hp, HP_TIMERGRP1_CTRL0,
++		     HP_TIMERGRP_RST_EN | HP_TIMERGRP_WDT_SRC_SEL,
++		     HP_TIMERGRP_APB_CLK_EN | HP_TIMERGRP_FORCE_NORST |
++		     HP_TIMERGRP_WDT_CLK_EN);
++}
++
++static void esp32s31_gpspi_prepare(struct esp32s31_clk_priv *priv,
++				   unsigned int port)
++{
++	u32 reg = HP_GPSPI2_CTRL0 + port * HP_GPSPI_CTRL_STRIDE;
++	u32 mask = HP_GPSPI_SYS_CLK_EN | HP_GPSPI_APB_CLK_EN |
++		   HP_GPSPI_RST_EN | HP_GPSPI_FORCE_NORST |
++		   HP_GPSPI_CLK_SRC_SEL | HP_GPSPI_HS_CLK_EN |
++		   HP_GPSPI_HS_CLK_DIV_NUM | HP_GPSPI_MST_CLK_DIV_NUM |
++		   HP_GPSPI_MST_CLK_EN;
++	u32 val = HP_GPSPI_SYS_CLK_EN | HP_GPSPI_APB_CLK_EN |
++		  HP_GPSPI_FORCE_NORST |
++		  FIELD_PREP(HP_GPSPI_CLK_SRC_SEL, 2) |
++		  HP_GPSPI_HS_CLK_EN |
++		  FIELD_PREP(HP_GPSPI_HS_CLK_DIV_NUM, 3 - 1) |
++		  FIELD_PREP(HP_GPSPI_MST_CLK_DIV_NUM, 2 - 1) |
++		  HP_GPSPI_MST_CLK_EN;
++
++	/*
++	 * Match the IDF default GPSPI clock path: BBPLL / 3 / 2 = 80 MHz.
++	 * Besides restoring the documented peripheral clock range, this gives
++	 * common rates such as 20 MHz an even main divider and therefore a 50%
++	 * SCLK duty cycle.  The former 40 MHz XTAL path generated 13.33 MHz with
++	 * an asymmetric divide-by-three waveform for requests above 13.33 MHz.
++	 */
++	esp32s31_rmw(priv->hp, reg, mask, val);
++}
++
++static void esp32s31_i2s_prepare(struct esp32s31_clk_priv *priv,
++				 unsigned int port)
++{
++	u32 reg = HP_I2S0_APB_CTRL0 + port * HP_I2S_CTRL_STRIDE;
++	u32 rx_reg = HP_I2S0_RX_CTRL0 + port * HP_I2S_CTRL_STRIDE;
++	u32 tx_reg = HP_I2S0_TX_CTRL0 + port * HP_I2S_CTRL_STRIDE;
++	u32 rx_div_reg = HP_I2S0_RX_DIV_CTRL0 + port * HP_I2S_CTRL_STRIDE;
++	u32 tx_div_reg = HP_I2S0_TX_DIV_CTRL0 + port * HP_I2S_CTRL_STRIDE;
++
++	esp32s31_rmw(priv->hp, reg, HP_I2S_APB_RST_EN,
++		     HP_I2S_APB_CLK_EN | HP_I2S_FORCE_NORST);
++	esp32s31_rmw(priv->hp_alive,
++		     HP_ALIVE_PAD_I2S0_CTRL + port * HP_ALIVE_PAD_I2S_STRIDE,
++		     0, HP_ALIVE_PAD_I2S_MCLK_EN);
++	/*
++	 * Follow the S31 IDF divider programming workaround exactly: switch
++	 * to a small integer divider, touch the fractional divider, clear it,
++	 * and only then install the target divider.  Programming DIV_N from
++	 * reset straight to the target can leave the I2S clock domain stopped;
++	 * in that state TX/RX UPDATE never self-clears.
++	 */
++	esp32s31_rmw(priv->hp, rx_reg,
++		     HP_I2S_CORE_CLK_SRC_SEL | HP_I2S_CORE_DIV_N |
++		     HP_I2S_MST_CLK_SEL,
++		     HP_I2S_CORE_CLK_EN | FIELD_PREP(HP_I2S_CORE_DIV_N, 2) |
++		     HP_I2S_MST_CLK_SEL);
++	esp32s31_rmw(priv->hp, tx_reg,
++		     HP_I2S_CORE_CLK_SRC_SEL | HP_I2S_CORE_DIV_N,
++		     HP_I2S_CORE_CLK_EN | FIELD_PREP(HP_I2S_CORE_DIV_N, 2));
++	writel(FIELD_PREP(HP_I2S_DIV_Y, 1), priv->hp + rx_div_reg);
++	writel(FIELD_PREP(HP_I2S_DIV_Y, 1), priv->hp + tx_div_reg);
++	writel(0, priv->hp + rx_div_reg);
++	writel(0, priv->hp + tx_div_reg);
++
++	/*
++	 * 40 MHz / (3 + 49 / 192) = 12.288 MHz, the standard 256 * Fs
++	 * master clock for 48 kHz audio.  The S31 fractional representation
++	 * for 49/192 is X=2, Y=45, Z=49, YN1=0.
++	 */
++	writel(FIELD_PREP(HP_I2S_DIV_X, 2) |
++	       FIELD_PREP(HP_I2S_DIV_Y, 45) |
++	       FIELD_PREP(HP_I2S_DIV_Z, 49), priv->hp + rx_div_reg);
++	writel(FIELD_PREP(HP_I2S_DIV_X, 2) |
++	       FIELD_PREP(HP_I2S_DIV_Y, 45) |
++	       FIELD_PREP(HP_I2S_DIV_Z, 49), priv->hp + tx_div_reg);
++	esp32s31_rmw(priv->hp, rx_reg, HP_I2S_CORE_DIV_N,
++		     FIELD_PREP(HP_I2S_CORE_DIV_N, 3));
++	esp32s31_rmw(priv->hp, tx_reg, HP_I2S_CORE_DIV_N,
++		     FIELD_PREP(HP_I2S_CORE_DIV_N, 3));
++}
++
++static void esp32s31_twai_prepare(struct esp32s31_clk_priv *priv,
++				  unsigned int port)
++{
++	u32 reg = HP_TWAI0_CTRL0 + port * HP_TWAI_CTRL_STRIDE;
++	u32 mem_reg = port ? HP_SYS_TWAI1_MEM_LP_CTRL :
++			     HP_SYS_TWAI0_MEM_LP_CTRL;
++	u32 mask = HP_TWAI_APB_CLK_EN | HP_TWAI_CLK_SRC_SEL |
++		   HP_TWAI_CLK_EN | HP_TWAI_RST_EN | HP_TWAI_FORCE_NORST;
++	u32 val = HP_TWAI_APB_CLK_EN |
++		  FIELD_PREP(HP_TWAI_CLK_SRC_SEL, 2) |
++		  HP_TWAI_CLK_EN | HP_TWAI_FORCE_NORST;
++
++	/* Match IDF: PLL_F80M source and SRAM forced out of low-power mode. */
++	esp32s31_rmw(priv->hp_sys, mem_reg,
++		     HP_SYS_TWAI_MEM_LP_EN | HP_SYS_TWAI_MEM_FORCE_CTRL,
++		     HP_SYS_TWAI_MEM_FORCE_CTRL);
++	esp32s31_rmw(priv->hp, reg, mask, val);
++	esp32s31_rmw(priv->hp, reg, 0, HP_TWAI_RST_EN);
++	esp32s31_rmw(priv->hp, reg, HP_TWAI_RST_EN, 0);
++}
++
++static int esp32s31_clk_prepare(struct clk_hw *hw)
++{
++	struct esp32s31_clk *clk = to_esp32s31_clk(hw);
++	struct esp32s31_clk_priv *priv = clk->priv;
++	unsigned long flags;
++
++	spin_lock_irqsave(&priv->lock, flags);
++
++	switch (clk->kind) {
++	case ESP32S31_CLK_KIND_SDMMC_BIU:
++	case ESP32S31_CLK_KIND_SDMMC_CIU:
++		priv->sdmmc_users++;
++		if (!priv->sdmmc_initialized) {
++			esp32s31_sdmmc_prepare(priv);
++			priv->sdmmc_initialized = true;
++		}
++		break;
++	case ESP32S31_CLK_KIND_EMAC_BUS:
++		priv->emac_users++;
++		if (!priv->emac_initialized) {
++			esp32s31_emac_prepare(priv);
++			priv->emac_initialized = true;
++		}
++		break;
++	case ESP32S31_CLK_KIND_EMAC_PTP:
++		priv->emac_users++;
++		if (!priv->emac_initialized) {
++			esp32s31_emac_prepare(priv);
++			priv->emac_initialized = true;
++		}
++		esp32s31_rmw(priv->cnnt, CNNT_SYS_HP_EMAC_PTP_CTRL,
++			     CNNT_EMAC_PTP_REF_CLK_SEL, CNNT_EMAC_PTP_REF_CLK_EN);
++		break;
++	case ESP32S31_CLK_KIND_EMAC_TXC:
++		priv->emac_users++;
++		if (!priv->emac_initialized) {
++			esp32s31_emac_prepare(priv);
++			priv->emac_initialized = true;
++		}
++		esp32s31_rmw(priv->cnnt, CNNT_SYS_HP_EMAC_REF_CTRL,
++			     CNNT_EMAC_REF_CLK_SEL, CNNT_EMAC_REF_CLK_EN);
++		break;
++	case ESP32S31_CLK_KIND_UART0:
++	case ESP32S31_CLK_KIND_UART1:
++	case ESP32S31_CLK_KIND_UART2:
++	case ESP32S31_CLK_KIND_UART3: {
++		unsigned int port = clk->kind - ESP32S31_CLK_KIND_UART0;
++
++		if (!priv->uart_initialized[port]) {
++			esp32s31_uart_prepare(priv, port);
++			priv->uart_initialized[port] = true;
++		}
++		break;
++	}
++	case ESP32S31_CLK_KIND_GPSPI2:
++	case ESP32S31_CLK_KIND_GPSPI3: {
++		unsigned int port = clk->kind - ESP32S31_CLK_KIND_GPSPI2;
++
++		if (!priv->gpspi_initialized[port]) {
++			esp32s31_gpspi_prepare(priv, port);
++			priv->gpspi_initialized[port] = true;
++		}
++		break;
++	}
++	case ESP32S31_CLK_KIND_I2S0:
++	case ESP32S31_CLK_KIND_I2S1: {
++		unsigned int port = clk->kind - ESP32S31_CLK_KIND_I2S0;
++
++		if (!priv->i2s_initialized[port]) {
++			esp32s31_i2s_prepare(priv, port);
++			priv->i2s_initialized[port] = true;
++		}
++		break;
++	}
++	case ESP32S31_CLK_KIND_TWAI0:
++	case ESP32S31_CLK_KIND_TWAI1: {
++		unsigned int port = clk->kind - ESP32S31_CLK_KIND_TWAI0;
++
++		if (!priv->twai_initialized[port]) {
++			esp32s31_twai_prepare(priv, port);
++			priv->twai_initialized[port] = true;
++		}
++		break;
++	}
++	case ESP32S31_CLK_KIND_WDT1:
++		if (!clk->initialized) {
++			esp32s31_wdt1_prepare(priv);
++			clk->initialized = true;
++		}
++		break;
++	case ESP32S31_CLK_KIND_GENERIC:
++		if (!clk->initialized) {
++			esp32s31_rmw(priv->hp, clk->reg, clk->reset_mask,
++				     clk->enable_mask | clk->force_norst_mask);
++			clk->initialized = true;
++		}
++		break;
++	case ESP32S31_CLK_KIND_FIXED:
++	case ESP32S31_CLK_KIND_XTAL:
++	case ESP32S31_CLK_KIND_CPLL:
++	case ESP32S31_CLK_KIND_MPLL:
++	case ESP32S31_CLK_KIND_APLL:
++	case ESP32S31_CLK_KIND_CPU:
++	case ESP32S31_CLK_KIND_MEM:
++	case ESP32S31_CLK_KIND_SYS:
++	case ESP32S31_CLK_KIND_APB:
++	case ESP32S31_CLK_KIND_PLL_DIV:
++		break;
++	}
++
++	spin_unlock_irqrestore(&priv->lock, flags);
++
++	return 0;
++}
++
++static void esp32s31_clk_unprepare(struct clk_hw *hw)
++{
++	struct esp32s31_clk *clk = to_esp32s31_clk(hw);
++	struct esp32s31_clk_priv *priv = clk->priv;
++	unsigned long flags;
++	u32 reg;
++
++	spin_lock_irqsave(&priv->lock, flags);
++	switch (clk->kind) {
++	case ESP32S31_CLK_KIND_SDMMC_BIU:
++	case ESP32S31_CLK_KIND_SDMMC_CIU:
++		/*
++		 * The boot loader may leave the shared gate enabled without a
++		 * matching CCF prepare count.  In that case late unused-clock
++		 * cleanup reaches us with zero software users and must still be
++		 * allowed to converge the hardware to the CCF state.
++		 */
++		if (priv->sdmmc_users && --priv->sdmmc_users)
++			break;
++		esp32s31_rmw(priv->hp, HP_SDIO_HOST_CTRL0,
++			      HP_SDMMC_SYS_CLK_EN | HP_SDIO_LS_CLK_EN, 0);
++		esp32s31_rmw(priv->hp, HP_SDIO_HOST_FUNC_CTRL0,
++			      HP_SDIO_SLF_CLK_EN | HP_SDIO_DRV_CLK_EN |
++			      HP_SDIO_SAM_CLK_EN, 0);
++		priv->sdmmc_initialized = false;
++		break;
++	case ESP32S31_CLK_KIND_EMAC_BUS:
++	case ESP32S31_CLK_KIND_EMAC_PTP:
++	case ESP32S31_CLK_KIND_EMAC_TXC:
++		/* See the SDMMC shared-gate boot-state case above. */
++		if (priv->emac_users && --priv->emac_users)
++			break;
++		esp32s31_rmw(priv->hp, HP_EMAC_CTRL0, HP_EMAC_SYS_CLK_EN, 0);
++		esp32s31_rmw(priv->cnnt, CNNT_SYS_HP_EMAC_REF_CTRL,
++			      CNNT_EMAC_REF_CLK_EN, 0);
++		esp32s31_rmw(priv->cnnt, CNNT_SYS_HP_EMAC_PTP_CTRL,
++			      CNNT_EMAC_PTP_REF_CLK_EN, 0);
++		esp32s31_rmw(priv->cnnt, CNNT_SYS_HP_EMAC_RX_CTRL,
++			      CNNT_EMAC_RX_PAD_CLK_EN | CNNT_EMAC_RX_180_CLK_EN, 0);
++		esp32s31_rmw(priv->cnnt, CNNT_SYS_HP_EMAC_TX_CTRL,
++			      CNNT_EMAC_TX_180_CLK_EN, 0);
++		priv->emac_initialized = false;
++		break;
++	case ESP32S31_CLK_KIND_UART0:
++	case ESP32S31_CLK_KIND_UART1:
++	case ESP32S31_CLK_KIND_UART2:
++	case ESP32S31_CLK_KIND_UART3:
++		reg = clk->kind - ESP32S31_CLK_KIND_UART0;
++		esp32s31_rmw(priv->hp, HP_UART0_CTRL0 + reg * HP_UART_CTRL_STRIDE,
++			      HP_UART_SYS_CLK_EN | HP_UART_APB_CLK_EN |
++			      HP_UART_CLK_EN, 0);
++		priv->uart_initialized[reg] = false;
++		break;
++	case ESP32S31_CLK_KIND_GPSPI2:
++	case ESP32S31_CLK_KIND_GPSPI3:
++		reg = clk->kind - ESP32S31_CLK_KIND_GPSPI2;
++		esp32s31_rmw(priv->hp, HP_GPSPI2_CTRL0 + reg * HP_GPSPI_CTRL_STRIDE,
++			      HP_GPSPI_SYS_CLK_EN | HP_GPSPI_APB_CLK_EN |
++			      HP_GPSPI_HS_CLK_EN | HP_GPSPI_MST_CLK_EN, 0);
++		priv->gpspi_initialized[reg] = false;
++		break;
++	case ESP32S31_CLK_KIND_I2S0:
++	case ESP32S31_CLK_KIND_I2S1:
++		reg = clk->kind - ESP32S31_CLK_KIND_I2S0;
++		esp32s31_rmw(priv->hp, HP_I2S0_APB_CTRL0 + reg * HP_I2S_CTRL_STRIDE,
++			      HP_I2S_APB_CLK_EN, 0);
++		esp32s31_rmw(priv->hp, HP_I2S0_RX_CTRL0 + reg * HP_I2S_CTRL_STRIDE,
++			      HP_I2S_CORE_CLK_EN, 0);
++		esp32s31_rmw(priv->hp, HP_I2S0_TX_CTRL0 + reg * HP_I2S_CTRL_STRIDE,
++			      HP_I2S_CORE_CLK_EN, 0);
++		esp32s31_rmw(priv->hp_alive,
++			      HP_ALIVE_PAD_I2S0_CTRL + reg * HP_ALIVE_PAD_I2S_STRIDE,
++			      HP_ALIVE_PAD_I2S_MCLK_EN, 0);
++		priv->i2s_initialized[reg] = false;
++		break;
++	case ESP32S31_CLK_KIND_TWAI0:
++	case ESP32S31_CLK_KIND_TWAI1:
++		reg = clk->kind - ESP32S31_CLK_KIND_TWAI0;
++		esp32s31_rmw(priv->hp, HP_TWAI0_CTRL0 + reg * HP_TWAI_CTRL_STRIDE,
++			      HP_TWAI_APB_CLK_EN | HP_TWAI_CLK_EN, 0);
++		priv->twai_initialized[reg] = false;
++		break;
++	case ESP32S31_CLK_KIND_WDT1:
++		esp32s31_rmw(priv->hp, HP_TIMERGRP1_CTRL0,
++			      HP_TIMERGRP_APB_CLK_EN | HP_TIMERGRP_WDT_CLK_EN, 0);
++		clk->initialized = false;
++		break;
++	case ESP32S31_CLK_KIND_GENERIC:
++		esp32s31_rmw(priv->hp, clk->reg, clk->enable_mask, 0);
++		clk->initialized = false;
++		break;
++	default:
++		break;
++	}
++	spin_unlock_irqrestore(&priv->lock, flags);
++}
++
++static int esp32s31_clk_is_prepared(struct clk_hw *hw)
++{
++	struct esp32s31_clk *clk = to_esp32s31_clk(hw);
++	struct esp32s31_clk_priv *priv = clk->priv;
++	u32 reg;
++
++	switch (clk->kind) {
++	case ESP32S31_CLK_KIND_SDMMC_BIU:
++		return !!(readl(priv->hp + HP_SDIO_HOST_CTRL0) &
++			  HP_SDMMC_SYS_CLK_EN);
++	case ESP32S31_CLK_KIND_SDMMC_CIU:
++		return !!(readl(priv->hp + HP_SDIO_HOST_FUNC_CTRL0) &
++			  HP_SDIO_SLF_CLK_EN);
++	case ESP32S31_CLK_KIND_EMAC_BUS:
++		return !!(readl(priv->hp + HP_EMAC_CTRL0) & HP_EMAC_SYS_CLK_EN);
++	case ESP32S31_CLK_KIND_EMAC_PTP:
++		return !!(readl(priv->cnnt + CNNT_SYS_HP_EMAC_PTP_CTRL) &
++			  CNNT_EMAC_PTP_REF_CLK_EN);
++	case ESP32S31_CLK_KIND_EMAC_TXC:
++		return !!(readl(priv->cnnt + CNNT_SYS_HP_EMAC_REF_CTRL) &
++			  CNNT_EMAC_REF_CLK_EN);
++	case ESP32S31_CLK_KIND_UART0:
++	case ESP32S31_CLK_KIND_UART1:
++	case ESP32S31_CLK_KIND_UART2:
++	case ESP32S31_CLK_KIND_UART3:
++		reg = clk->kind - ESP32S31_CLK_KIND_UART0;
++		return !!(readl(priv->hp + HP_UART0_CTRL0 +
++				reg * HP_UART_CTRL_STRIDE) & HP_UART_CLK_EN);
++	case ESP32S31_CLK_KIND_GPSPI2:
++	case ESP32S31_CLK_KIND_GPSPI3:
++		reg = clk->kind - ESP32S31_CLK_KIND_GPSPI2;
++		return !!(readl(priv->hp + HP_GPSPI2_CTRL0 +
++				reg * HP_GPSPI_CTRL_STRIDE) & HP_GPSPI_MST_CLK_EN);
++	case ESP32S31_CLK_KIND_I2S0:
++	case ESP32S31_CLK_KIND_I2S1:
++		reg = clk->kind - ESP32S31_CLK_KIND_I2S0;
++		return !!(readl(priv->hp + HP_I2S0_APB_CTRL0 +
++				reg * HP_I2S_CTRL_STRIDE) & HP_I2S_APB_CLK_EN);
++	case ESP32S31_CLK_KIND_TWAI0:
++	case ESP32S31_CLK_KIND_TWAI1:
++		reg = clk->kind - ESP32S31_CLK_KIND_TWAI0;
++		return !!(readl(priv->hp + HP_TWAI0_CTRL0 +
++				reg * HP_TWAI_CTRL_STRIDE) & HP_TWAI_CLK_EN);
++	case ESP32S31_CLK_KIND_WDT1:
++		return !!(readl(priv->hp + HP_TIMERGRP1_CTRL0) &
++			  HP_TIMERGRP_WDT_CLK_EN);
++	case ESP32S31_CLK_KIND_GENERIC:
++		reg = readl(priv->hp + clk->reg);
++		return (reg & clk->enable_mask) == clk->enable_mask;
++	default:
++		return 1;
++	}
++}
++
++static unsigned long esp32s31_clk_recalc_rate(struct clk_hw *hw,
++					      unsigned long parent_rate)
++{
++	struct esp32s31_clk *clk = to_esp32s31_clk(hw);
++	struct esp32s31_clk_priv *priv = clk->priv;
++	u32 div, denominator, numerator, reg, xtal_mhz;
++	u64 rate;
++
++	switch (clk->kind) {
++	case ESP32S31_CLK_KIND_XTAL:
++		xtal_mhz = FIELD_GET(LP_XTAL_FREQ_MHZ,
++				     readl(priv->lp_aon + LP_HP_CLK_CTRL));
++		return xtal_mhz ? xtal_mhz * 1000000UL : ESP32S31_XTAL_RATE;
++	case ESP32S31_CLK_KIND_CPLL:
++		reg = readl(priv->lp_aon + LP_CPLL_DIV);
++		div = FIELD_GET(LP_CPLL_REF_DIV, reg);
++		if (!div)
++			return 0;
++		return parent_rate * FIELD_GET(LP_CPLL_FB_DIV, reg) / div;
++	case ESP32S31_CLK_KIND_MPLL:
++		reg = readl(priv->lp_aon + LP_MPLL_DIV);
++		return parent_rate * (FIELD_GET(LP_MPLL_FB_DIV, reg) + 1) / 2;
++	case ESP32S31_CLK_KIND_APLL:
++		reg = readl(priv->lp_aon + LP_APLL_SDM) & LP_APLL_SDM_MASK;
++		numerator = ((4 + ((reg >> 16) & 0x3f)) << 16) |
++			    (reg & 0xffff);
++		denominator = (FIELD_GET(LP_APLL_OUT_DIV,
++				readl(priv->lp_aon + LP_APLL_DIV)) + 2) << 17;
++		return div64_u64((u64)parent_rate * numerator, denominator);
++	case ESP32S31_CLK_KIND_CPU:
++		reg = readl(priv->hp + HP_CPU_FREQ_CTRL0);
++		div = FIELD_GET(HP_CLK_DIV_NUM, reg) + 1;
++		numerator = FIELD_GET(HP_CLK_DIV_NUMERATOR, reg);
++		denominator = FIELD_GET(HP_CLK_DIV_DENOMINATOR, reg);
++		if (!numerator || !denominator)
++			return parent_rate / div;
++		rate = (u64)parent_rate * denominator;
++		return div64_u64(rate, div * denominator + numerator);
++	case ESP32S31_CLK_KIND_MEM:
++		return parent_rate /
++		       ((readl(priv->hp + HP_MEM_FREQ_CTRL0) & BIT(0)) + 1);
++	case ESP32S31_CLK_KIND_SYS:
++		reg = readl(priv->hp + HP_SYS_FREQ_CTRL0);
++		break;
++	case ESP32S31_CLK_KIND_APB:
++		reg = readl(priv->hp + HP_APB_FREQ_CTRL0);
++		break;
++	case ESP32S31_CLK_KIND_PLL_DIV:
++		div = FIELD_GET(HP_REF_CLK_DIV_NUM,
++				readl(priv->hp + clk->reg)) + 1;
++		return parent_rate / div;
++	case ESP32S31_CLK_KIND_EMAC_TXC:
++		div = FIELD_GET(CNNT_EMAC_REF_CLK_DIV,
++				readl(priv->cnnt + CNNT_SYS_HP_EMAC_REF_CTRL));
++		return parent_rate / (div + 1);
++	default:
++		return clk->fixed_rate;
++	}
++
++	div = FIELD_GET(HP_CLK_DIV_NUM, reg) + 1;
++	numerator = FIELD_GET(HP_CLK_DIV_NUMERATOR, reg);
++	denominator = FIELD_GET(HP_CLK_DIV_DENOMINATOR, reg);
++	if (!numerator || !denominator)
++		return parent_rate / div;
++	rate = (u64)parent_rate * denominator;
++
++	return div64_u64(rate, div * denominator + numerator);
++}
++
++static u8 esp32s31_cpu_get_parent(struct clk_hw *hw)
++{
++	struct esp32s31_clk *clk = to_esp32s31_clk(hw);
++
++	return FIELD_GET(HP_SOC_CLK_SEL_MASK,
++			 readl(clk->priv->hp + HP_SOC_CLK_SEL));
++}
++
++struct esp32s31_cpu_rate {
++	unsigned long rate;
++	u8 source;
++	u8 cpu_div;
++	u8 mem_div;
++	u8 sys_div;
++	u8 apb_div;
++};
++
++static const struct esp32s31_cpu_rate esp32s31_cpu_rates[] = {
++	{  40000000UL, 0, 1, 1, 1, 1 },
++	{  80000000UL, 1, 4, 1, 1, 2 },
++	{ 160000000UL, 1, 2, 1, 2, 2 },
++	{ 240000000UL, 3, 1, 2, 3, 2 },
++	{ 320000000UL, 1, 1, 2, 3, 2 },
++};
++
++static const struct esp32s31_cpu_rate *esp32s31_cpu_find_rate(unsigned long rate)
++{
++	unsigned int i;
++
++	for (i = 0; i < ARRAY_SIZE(esp32s31_cpu_rates); i++)
++		if (esp32s31_cpu_rates[i].rate == rate)
++			return &esp32s31_cpu_rates[i];
++
++	return NULL;
++}
++
++static long esp32s31_cpu_round_rate(struct clk_hw *hw, unsigned long rate,
++				    unsigned long *parent_rate)
++{
++	const struct esp32s31_cpu_rate *best = &esp32s31_cpu_rates[0];
++	unsigned long best_delta = abs_diff(rate, best->rate);
++	unsigned int i;
++
++	for (i = 1; i < ARRAY_SIZE(esp32s31_cpu_rates); i++) {
++		unsigned long delta = abs_diff(rate, esp32s31_cpu_rates[i].rate);
++
++		if (delta < best_delta) {
++			best = &esp32s31_cpu_rates[i];
++			best_delta = delta;
++		}
++	}
++
++	return best->rate;
++}
++
++static int esp32s31_cpu_set_rate(struct clk_hw *hw, unsigned long rate,
++				 unsigned long parent_rate)
++{
++	struct esp32s31_clk *clk = to_esp32s31_clk(hw);
++	struct esp32s31_clk_priv *priv = clk->priv;
++	const struct esp32s31_cpu_rate *config;
++	unsigned long flags;
++	u32 value;
++	int timeout;
++
++	config = esp32s31_cpu_find_rate(rate);
++	if (!config)
++		return -EINVAL;
++
++	/*
++	 * All divider and mux changes are latched together by SOC_CLK_UPDATE.
++	 * This is the same atomic bus update sequence used by ESP-IDF and keeps
++	 * both harts on one coherent clock configuration throughout a change.
++	 */
++	spin_lock_irqsave(&priv->lock, flags);
++	value = FIELD_PREP(HP_CLK_DIV_NUM, config->cpu_div - 1);
++	writel(value, priv->hp + HP_CPU_FREQ_CTRL0);
++	writel(config->mem_div - 1, priv->hp + HP_MEM_FREQ_CTRL0);
++	writel(config->sys_div - 1, priv->hp + HP_SYS_FREQ_CTRL0);
++	writel(config->apb_div - 1, priv->hp + HP_APB_FREQ_CTRL0);
++	esp32s31_rmw(priv->hp, HP_SOC_CLK_SEL, HP_SOC_CLK_SEL_MASK,
++		     FIELD_PREP(HP_SOC_CLK_SEL_MASK, config->source));
++	writel(HP_SOC_CLK_UPDATE, priv->hp + HP_ROOT_CLK_CTRL0);
++	for (timeout = 10000; timeout > 0; timeout--) {
++		if (!(readl(priv->hp + HP_ROOT_CLK_CTRL0) & HP_SOC_CLK_UPDATE))
++			break;
++		cpu_relax();
++	}
++	spin_unlock_irqrestore(&priv->lock, flags);
++
++	if (!timeout)
++		return -ETIMEDOUT;
++	if (clk_hw_get_rate(hw) != rate)
++		return -EIO;
++
++	return 0;
++}
++
++static u8 esp32s31_pll_div_get_parent(struct clk_hw *hw)
++{
++	struct esp32s31_clk *clk = to_esp32s31_clk(hw);
++
++	if (clk->reg != HP_REF_50M_CTRL0)
++		return 0;
++
++	return readl(clk->priv->hp + HP_REF_500M_CTRL0) & BIT(0) ? 1 : 0;
++}
++
++static long esp32s31_txc_round_rate(struct clk_hw *hw, unsigned long rate,
++				    unsigned long *parent_rate)
++{
++	if (rate >= 125000000)
++		return 125000000;
++	if (rate >= 25000000)
++		return 25000000;
++
++	return 2500000;
++}
++
++static int esp32s31_txc_set_rate(struct clk_hw *hw, unsigned long rate,
++				 unsigned long parent_rate)
++{
++	struct esp32s31_clk *clk = to_esp32s31_clk(hw);
++	struct esp32s31_clk_priv *priv = clk->priv;
++	unsigned long flags;
++	u32 div;
++
++	switch (rate) {
++	case 125000000:
++		div = 3;
++		break;
++	case 25000000:
++		div = 19;
++		break;
++	case 2500000:
++		div = 199;
++		break;
++	default:
++		return -EINVAL;
++	}
++
++	spin_lock_irqsave(&priv->lock, flags);
++	esp32s31_rmw(priv->cnnt, CNNT_SYS_HP_EMAC_REF_CTRL,
++		     CNNT_EMAC_REF_CLK_SEL | CNNT_EMAC_REF_CLK_DIV,
++		     CNNT_EMAC_REF_CLK_EN | FIELD_PREP(CNNT_EMAC_REF_CLK_DIV, div));
++	spin_unlock_irqrestore(&priv->lock, flags);
++
++	return 0;
++}
++
++static long esp32s31_i2s_round_rate(struct clk_hw *hw, unsigned long rate,
++				    unsigned long *parent_rate)
++{
++	if (rate < 1000000 || rate > ESP32S31_XTAL_RATE)
++		return -EINVAL;
++	return rate;
++}
++
++static int esp32s31_i2s_set_rate(struct clk_hw *hw, unsigned long rate,
++				 unsigned long parent_rate)
++{
++	struct esp32s31_clk *clk = to_esp32s31_clk(hw);
++	struct esp32s31_clk_priv *priv = clk->priv;
++	unsigned int port = clk->kind - ESP32S31_CLK_KIND_I2S0;
++	u32 rx_reg = HP_I2S0_RX_CTRL0 + port * HP_I2S_CTRL_STRIDE;
++	u32 tx_reg = HP_I2S0_TX_CTRL0 + port * HP_I2S_CTRL_STRIDE;
++	u32 rx_div_reg = HP_I2S0_RX_DIV_CTRL0 + port * HP_I2S_CTRL_STRIDE;
++	u32 tx_div_reg = HP_I2S0_TX_DIV_CTRL0 + port * HP_I2S_CTRL_STRIDE;
++	unsigned long flags;
++	unsigned long numerator, denominator;
++	u32 integer, x = 0, y = 0, z = 0, yn1 = 0, fractional = 0;
++	u64 actual_denominator;
++
++	if (rate < 1000000 || rate > ESP32S31_XTAL_RATE)
++		return -EINVAL;
++	integer = ESP32S31_XTAL_RATE / rate;
++	if (!integer || integer > FIELD_MAX(HP_I2S_CORE_DIV_N))
++		return -ERANGE;
++	numerator = ESP32S31_XTAL_RATE - (unsigned long)integer * rate;
++	denominator = rate;
++	if (numerator) {
++		rational_best_approximation(numerator, denominator, 511, 511,
++					    &numerator, &denominator);
++		yn1 = numerator * 2 > denominator;
++		z = yn1 ? denominator - numerator : numerator;
++		if (!z)
++			return -ERANGE;
++		x = denominator / z - 1;
++		y = denominator % z;
++		if (x > 511 || y > 511 || z > 511)
++			return -ERANGE;
++		fractional = FIELD_PREP(HP_I2S_DIV_X, x) |
++			     FIELD_PREP(HP_I2S_DIV_Y, y) |
++			     FIELD_PREP(HP_I2S_DIV_Z, z) |
++			     (yn1 ? HP_I2S_DIV_YN1 : 0);
++	}
++
++	spin_lock_irqsave(&priv->lock, flags);
++	/* Preserve the hardware workaround used during prepare. */
++	esp32s31_rmw(priv->hp, rx_reg, HP_I2S_CORE_DIV_N,
++		     FIELD_PREP(HP_I2S_CORE_DIV_N, 2));
++	esp32s31_rmw(priv->hp, tx_reg, HP_I2S_CORE_DIV_N,
++		     FIELD_PREP(HP_I2S_CORE_DIV_N, 2));
++	writel(FIELD_PREP(HP_I2S_DIV_Y, 1), priv->hp + rx_div_reg);
++	writel(FIELD_PREP(HP_I2S_DIV_Y, 1), priv->hp + tx_div_reg);
++	writel(0, priv->hp + rx_div_reg);
++	writel(0, priv->hp + tx_div_reg);
++	writel(fractional, priv->hp + rx_div_reg);
++	writel(fractional, priv->hp + tx_div_reg);
++	esp32s31_rmw(priv->hp, rx_reg, HP_I2S_CORE_DIV_N,
++		     FIELD_PREP(HP_I2S_CORE_DIV_N, integer));
++	esp32s31_rmw(priv->hp, tx_reg, HP_I2S_CORE_DIV_N,
++		     FIELD_PREP(HP_I2S_CORE_DIV_N, integer));
++	actual_denominator = (u64)integer * denominator + numerator;
++	clk->fixed_rate = div64_u64((u64)ESP32S31_XTAL_RATE * denominator,
++				    actual_denominator);
++	spin_unlock_irqrestore(&priv->lock, flags);
++	return 0;
++}
++
++static const struct clk_ops esp32s31_fixed_ops = {
++	.recalc_rate = esp32s31_clk_recalc_rate,
++};
++
++static const struct clk_ops esp32s31_cpu_ops = {
++	.get_parent = esp32s31_cpu_get_parent,
++	.recalc_rate = esp32s31_clk_recalc_rate,
++	.round_rate = esp32s31_cpu_round_rate,
++	.set_rate = esp32s31_cpu_set_rate,
++};
++
++static const struct clk_ops esp32s31_pll_div_ops = {
++	.get_parent = esp32s31_pll_div_get_parent,
++	.recalc_rate = esp32s31_clk_recalc_rate,
++};
++
++static const struct clk_ops esp32s31_gate_ops = {
++	.prepare = esp32s31_clk_prepare,
++	.unprepare = esp32s31_clk_unprepare,
++	.is_prepared = esp32s31_clk_is_prepared,
++	.recalc_rate = esp32s31_clk_recalc_rate,
++};
++
++static const struct clk_ops esp32s31_txc_ops = {
++	.prepare = esp32s31_clk_prepare,
++	.unprepare = esp32s31_clk_unprepare,
++	.is_prepared = esp32s31_clk_is_prepared,
++	.recalc_rate = esp32s31_clk_recalc_rate,
++	.round_rate = esp32s31_txc_round_rate,
++	.set_rate = esp32s31_txc_set_rate,
++};
++
++static const struct clk_ops esp32s31_i2s_ops = {
++	.prepare = esp32s31_clk_prepare,
++	.unprepare = esp32s31_clk_unprepare,
++	.is_prepared = esp32s31_clk_is_prepared,
++	.recalc_rate = esp32s31_clk_recalc_rate,
++	.round_rate = esp32s31_i2s_round_rate,
++	.set_rate = esp32s31_i2s_set_rate,
++};
++
++static bool esp32s31_clk_is_critical(unsigned int id)
++{
++	switch (id) {
++	case ESP32S31_CLK_XTAL:
++	case ESP32S31_CLK_SYS:
++	case ESP32S31_CLK_MPLL:
++	case ESP32S31_CLK_UART0:
++	case ESP32S31_CLK_SYSTIMER:
++	case ESP32S31_CLK_CPLL:
++	case ESP32S31_CLK_BBPLL:
++	case ESP32S31_CLK_CPU:
++	case ESP32S31_CLK_MEM:
++	case ESP32S31_CLK_APB:
++		return true;
++	default:
++		return false;
++	}
++}
++
++static int __esp32s31_register_clk(struct device *dev,
++				   struct esp32s31_clk_priv *priv,
++				   unsigned int id, const char *name,
++				   enum esp32s31_clk_kind kind,
++				   unsigned long rate,
++				   const char * const *parent_names,
++				   unsigned int num_parents)
++{
++	struct clk_init_data init = {};
++	struct esp32s31_clk *clk;
++	const struct clk_ops *ops;
++	int ret;
++
++	clk = devm_kzalloc(dev, sizeof(*clk), GFP_KERNEL);
++	if (!clk)
++		return -ENOMEM;
++
++	switch (kind) {
++	case ESP32S31_CLK_KIND_FIXED:
++	case ESP32S31_CLK_KIND_XTAL:
++	case ESP32S31_CLK_KIND_CPLL:
++	case ESP32S31_CLK_KIND_MPLL:
++	case ESP32S31_CLK_KIND_APLL:
++	case ESP32S31_CLK_KIND_MEM:
++	case ESP32S31_CLK_KIND_SYS:
++	case ESP32S31_CLK_KIND_APB:
++		ops = &esp32s31_fixed_ops;
++		break;
++	case ESP32S31_CLK_KIND_PLL_DIV:
++		ops = &esp32s31_pll_div_ops;
++		break;
++	case ESP32S31_CLK_KIND_CPU:
++		ops = &esp32s31_cpu_ops;
++		break;
++	case ESP32S31_CLK_KIND_EMAC_TXC:
++		ops = &esp32s31_txc_ops;
++		break;
++	case ESP32S31_CLK_KIND_I2S0:
++	case ESP32S31_CLK_KIND_I2S1:
++		ops = &esp32s31_i2s_ops;
++		break;
++	default:
++		ops = &esp32s31_gate_ops;
++		break;
++	}
++
++	init.name = name;
++	init.ops = ops;
++	init.parent_names = parent_names;
++	init.num_parents = num_parents;
++	if (esp32s31_clk_is_critical(id))
++		init.flags |= CLK_IS_CRITICAL;
++	if (kind == ESP32S31_CLK_KIND_CPU || kind == ESP32S31_CLK_KIND_MEM ||
++	    kind == ESP32S31_CLK_KIND_SYS || kind == ESP32S31_CLK_KIND_APB)
++		init.flags |= CLK_GET_RATE_NOCACHE;
++
++	clk->hw.init = &init;
++	clk->priv = priv;
++	clk->kind = kind;
++	clk->fixed_rate = rate;
++
++	ret = devm_clk_hw_register(dev, &clk->hw);
++	if (ret)
++		return ret;
++
++	priv->onecell->hws[id] = &clk->hw;
++
++	return 0;
++}
++
++static int esp32s31_register_clk(struct device *dev,
++				 struct esp32s31_clk_priv *priv,
++				 unsigned int id, const char *name,
++				 enum esp32s31_clk_kind kind,
++				 unsigned long rate)
++{
++	return __esp32s31_register_clk(dev, priv, id, name, kind, rate,
++				       NULL, 0);
++}
++
++static int esp32s31_register_parented_clk(struct device *dev,
++					  struct esp32s31_clk_priv *priv,
++					  unsigned int id, const char *name,
++					  enum esp32s31_clk_kind kind,
++					  unsigned long rate,
++					  const char * const *parent_names,
++					  unsigned int num_parents)
++{
++	return __esp32s31_register_clk(dev, priv, id, name, kind, rate,
++				       parent_names, num_parents);
++}
++
++static int esp32s31_register_pll_div(struct device *dev,
++				     struct esp32s31_clk_priv *priv,
++				     unsigned int id, const char *name, u16 reg,
++				     const char * const *parent_names,
++				     unsigned int num_parents)
++{
++	struct esp32s31_clk *clk;
++	int ret;
++
++	ret = esp32s31_register_parented_clk(dev, priv, id, name,
++					 ESP32S31_CLK_KIND_PLL_DIV, 0,
++					 parent_names, num_parents);
++	if (ret)
++		return ret;
++
++	clk = to_esp32s31_clk(priv->onecell->hws[id]);
++	clk->reg = reg;
++
++	return 0;
++}
++
++static int esp32s31_register_gate(struct device *dev,
++				  struct esp32s31_clk_priv *priv,
++				  unsigned int id, const char *name,
++				  unsigned long rate, u16 reg,
++				  u32 enable_mask, u32 reset_mask,
++				  u32 force_norst_mask)
++{
++	struct esp32s31_clk *clk;
++	int ret;
++
++	ret = esp32s31_register_clk(dev, priv, id, name,
++				    ESP32S31_CLK_KIND_GENERIC, rate);
++	if (ret)
++		return ret;
++
++	clk = to_esp32s31_clk(priv->onecell->hws[id]);
++	clk->reg = reg;
++	clk->enable_mask = enable_mask;
++	clk->reset_mask = reset_mask;
++	clk->force_norst_mask = force_norst_mask;
++
++	return 0;
++}
++
++static const char * const esp32s31_xtal_parent[] = { "xtal" };
++static const char * const esp32s31_bbpll_parent[] = { "bbpll" };
++static const char * const esp32s31_mpll_parent[] = { "mpll" };
++static const char * const esp32s31_ref50_parents[] = { "cpll", "mpll" };
++static const char * const esp32s31_cpu_parents[] = {
++	"xtal", "cpll", "rc-fast", "pll-f240",
++};
++static const char * const esp32s31_cpu_parent[] = { "cpu" };
++static const char * const esp32s31_sys_parent[] = { "sys" };
++
++static ssize_t clocks_show(struct device *dev,
++			   struct device_attribute *attr, char *buf)
++{
++	struct esp32s31_clk_priv *priv = dev_get_drvdata(dev);
++	ssize_t len = 0;
++	unsigned int id;
++
++	for (id = 0; id < priv->onecell->num; id++) {
++		struct clk_hw *hw = priv->onecell->hws[id];
++
++		if (!hw)
++			continue;
++		len += sysfs_emit_at(buf, len,
++			"%u %s state=%s critical=%u rate=%lu\n", id,
++			clk_hw_get_name(hw),
++			clk_hw_is_prepared(hw) ? "on" : "off",
++			esp32s31_clk_is_critical(id), clk_hw_get_rate(hw));
++		if (len >= PAGE_SIZE)
++			break;
++	}
++
++	return len;
++}
++static DEVICE_ATTR_RO(clocks);
++
++static struct attribute *esp32s31_clk_attrs[] = {
++	&dev_attr_clocks.attr,
++	NULL,
++};
++
++static const struct attribute_group esp32s31_clk_attr_group = {
++	.attrs = esp32s31_clk_attrs,
++};
++
++static int esp32s31_clk_poweroff_prepare(struct sys_off_data *data);
++
++static int esp32s31_clk_probe(struct platform_device *pdev)
++{
++	struct device *dev = &pdev->dev;
++	struct esp32s31_clk_priv *priv;
++	struct clk_hw_onecell_data *onecell;
++	struct resource *res;
++	unsigned long apb_rate, sys_rate;
++	int ret;
++
++	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
++	if (!priv)
++		return -ENOMEM;
++
++	onecell = devm_kzalloc(dev, struct_size(onecell, hws, ESP32S31_CLK_NR),
++			       GFP_KERNEL);
++	if (!onecell)
++		return -ENOMEM;
++
++	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "hp-sys-clkrst");
++	if (!res)
++		return -EINVAL;
++	priv->hp = devm_ioremap(dev, res->start, resource_size(res));
++	if (!priv->hp)
++		return -ENOMEM;
++
++	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "hp-system");
++	if (!res)
++		return -EINVAL;
++	priv->hp_sys = devm_ioremap(dev, res->start, resource_size(res));
++	if (!priv->hp_sys)
++		return -ENOMEM;
++
++	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "cnnt-sys");
++	if (!res)
++		return -EINVAL;
++	priv->cnnt = devm_ioremap(dev, res->start, resource_size(res));
++	if (!priv->cnnt)
++		return -ENOMEM;
++
++	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "hp-alive-sys");
++	if (!res)
++		return -EINVAL;
++	priv->hp_alive = devm_ioremap(dev, res->start, resource_size(res));
++	if (!priv->hp_alive)
++		return -ENOMEM;
++
++	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "lp-aon-clkrst");
++	if (!res)
++		return -EINVAL;
++	priv->lp_aon = devm_ioremap(dev, res->start, resource_size(res));
++	if (!priv->lp_aon)
++		return -ENOMEM;
++
++	spin_lock_init(&priv->lock);
++	priv->onecell = onecell;
++	onecell->num = ESP32S31_CLK_NR;
++
++	ret = esp32s31_register_clk(dev, priv, ESP32S31_CLK_XTAL, "xtal",
++				    ESP32S31_CLK_KIND_XTAL, 0);
++	if (ret)
++		return ret;
++	ret = esp32s31_register_clk(dev, priv, ESP32S31_CLK_RC_FAST, "rc-fast",
++				    ESP32S31_CLK_KIND_FIXED, ESP32S31_RC_FAST_RATE);
++	if (ret)
++		return ret;
++	ret = esp32s31_register_clk(dev, priv, ESP32S31_CLK_RC_SLOW, "rc-slow",
++				    ESP32S31_CLK_KIND_FIXED, ESP32S31_RC_SLOW_RATE);
++	if (ret)
++		return ret;
++	ret = esp32s31_register_clk(dev, priv, ESP32S31_CLK_XTAL32K, "xtal32k",
++				    ESP32S31_CLK_KIND_FIXED, ESP32S31_XTAL32K_RATE);
++	if (ret)
++		return ret;
++	ret = esp32s31_register_parented_clk(dev, priv, ESP32S31_CLK_CPLL,
++					     "cpll", ESP32S31_CLK_KIND_CPLL, 0,
++					     esp32s31_xtal_parent, 1);
++	if (ret)
++		return ret;
++	ret = esp32s31_register_parented_clk(dev, priv, ESP32S31_CLK_BBPLL,
++					     "bbpll", ESP32S31_CLK_KIND_FIXED,
++					     ESP32S31_BBPLL_RATE,
++					     esp32s31_xtal_parent, 1);
++	if (ret)
++		return ret;
++	ret = esp32s31_register_parented_clk(dev, priv, ESP32S31_CLK_MPLL,
++					     "mpll", ESP32S31_CLK_KIND_MPLL, 0,
++					     esp32s31_xtal_parent, 1);
++	if (ret)
++		return ret;
++	ret = esp32s31_register_parented_clk(dev, priv, ESP32S31_CLK_APLL,
++					     "apll", ESP32S31_CLK_KIND_APLL, 0,
++					     esp32s31_xtal_parent, 1);
++	if (ret)
++		return ret;
++	ret = esp32s31_register_pll_div(dev, priv, ESP32S31_CLK_PLL_F20,
++					"pll-f20", HP_REF_20M_CTRL0,
++					esp32s31_bbpll_parent, 1);
++	if (ret)
++		return ret;
++	ret = esp32s31_register_pll_div(dev, priv, ESP32S31_CLK_PLL_F25,
++					"pll-f25", HP_REF_25M_CTRL0,
++					esp32s31_mpll_parent, 1);
++	if (ret)
++		return ret;
++	ret = esp32s31_register_pll_div(dev, priv, ESP32S31_CLK_PLL_F50,
++					"pll-f50", HP_REF_50M_CTRL0,
++					esp32s31_ref50_parents, 2);
++	if (ret)
++		return ret;
++	ret = esp32s31_register_pll_div(dev, priv, ESP32S31_CLK_PLL_F80,
++					"pll-f80", HP_REF_80M_CTRL0,
++					esp32s31_bbpll_parent, 1);
++	if (ret)
++		return ret;
++	ret = esp32s31_register_pll_div(dev, priv, ESP32S31_CLK_PLL_F160,
++					"pll-f160", HP_REF_160M_CTRL0,
++					esp32s31_bbpll_parent, 1);
++	if (ret)
++		return ret;
++	ret = esp32s31_register_pll_div(dev, priv, ESP32S31_CLK_PLL_F240,
++					"pll-f240", HP_REF_240M_CTRL0,
++					esp32s31_bbpll_parent, 1);
++	if (ret)
++		return ret;
++	ret = esp32s31_register_pll_div(dev, priv, ESP32S31_CLK_PLL_F120,
++					"pll-f120", HP_REF_120M_CTRL0,
++					esp32s31_bbpll_parent, 1);
++	if (ret)
++		return ret;
++	ret = esp32s31_register_pll_div(dev, priv, ESP32S31_CLK_PLL_F60,
++					"pll-f60", HP_REF_60M_CTRL0,
++					esp32s31_bbpll_parent, 1);
++	if (ret)
++		return ret;
++	ret = esp32s31_register_parented_clk(dev, priv, ESP32S31_CLK_XTAL_D2,
++					     "xtal-d2", ESP32S31_CLK_KIND_FIXED,
++					     ESP32S31_XTAL_RATE / 2,
++					     esp32s31_xtal_parent, 1);
++	if (ret)
++		return ret;
++	ret = esp32s31_register_clk(dev, priv, ESP32S31_CLK_RTC_FAST,
++				    "rtc-fast", ESP32S31_CLK_KIND_FIXED,
++				    ESP32S31_RC_FAST_RATE);
++	if (ret)
++		return ret;
++	ret = esp32s31_register_clk(dev, priv, ESP32S31_CLK_RTC_SLOW,
++				    "rtc-slow", ESP32S31_CLK_KIND_FIXED,
++				    ESP32S31_RC_SLOW_RATE);
++	if (ret)
++		return ret;
++	ret = esp32s31_register_parented_clk(dev, priv, ESP32S31_CLK_CPU,
++					     "cpu", ESP32S31_CLK_KIND_CPU, 0,
++					     esp32s31_cpu_parents,
++					     ARRAY_SIZE(esp32s31_cpu_parents));
++	if (ret)
++		return ret;
++	ret = esp32s31_register_parented_clk(dev, priv, ESP32S31_CLK_MEM,
++					     "mem", ESP32S31_CLK_KIND_MEM, 0,
++					     esp32s31_cpu_parent, 1);
++	if (ret)
++		return ret;
++	ret = esp32s31_register_parented_clk(dev, priv, ESP32S31_CLK_SYS,
++					     "sys", ESP32S31_CLK_KIND_SYS, 0,
++					     esp32s31_cpu_parent, 1);
++	if (ret)
++		return ret;
++	ret = esp32s31_register_parented_clk(dev, priv, ESP32S31_CLK_APB,
++					     "apb", ESP32S31_CLK_KIND_APB, 0,
++					     esp32s31_sys_parent, 1);
++	if (ret)
++		return ret;
++
++	sys_rate = clk_hw_get_rate(onecell->hws[ESP32S31_CLK_SYS]);
++	apb_rate = clk_hw_get_rate(onecell->hws[ESP32S31_CLK_APB]);
++	ret = esp32s31_register_clk(dev, priv, ESP32S31_CLK_SDMMC_BIU,
++				    "sdmmc-biu", ESP32S31_CLK_KIND_SDMMC_BIU,
++				    sys_rate);
++	if (ret)
++		return ret;
++	ret = esp32s31_register_clk(dev, priv, ESP32S31_CLK_SDMMC_CIU,
++				    "sdmmc-ciu", ESP32S31_CLK_KIND_SDMMC_CIU,
++				    ESP32S31_SDMMC_CIU_RATE);
++	if (ret)
++		return ret;
++	ret = esp32s31_register_clk(dev, priv, ESP32S31_CLK_EMAC_STMMACETH,
++				    "emac-stmmaceth", ESP32S31_CLK_KIND_EMAC_BUS,
++				    sys_rate);
++	if (ret)
++		return ret;
++	ret = esp32s31_register_clk(dev, priv, ESP32S31_CLK_EMAC_PCLK,
++				    "emac-pclk", ESP32S31_CLK_KIND_EMAC_BUS,
++				    sys_rate);
++	if (ret)
++		return ret;
++	ret = esp32s31_register_clk(dev, priv, ESP32S31_CLK_EMAC_PTP_REF,
++				    "emac-ptp-ref", ESP32S31_CLK_KIND_EMAC_PTP,
++				    ESP32S31_XTAL_RATE);
++	if (ret)
++		return ret;
++	ret = esp32s31_register_parented_clk(dev, priv,
++					     ESP32S31_CLK_EMAC_RGMII_TXC,
++					     "emac-rgmii-txc",
++					     ESP32S31_CLK_KIND_EMAC_TXC,
++					     125000000,
++					     esp32s31_mpll_parent, 1);
++	if (ret)
++		return ret;
++	ret = esp32s31_register_clk(dev, priv, ESP32S31_CLK_UART0,
++				    "uart0", ESP32S31_CLK_KIND_UART0,
++				    ESP32S31_XTAL_RATE);
++	if (ret)
++		return ret;
++	ret = esp32s31_register_clk(dev, priv, ESP32S31_CLK_UART1,
++				    "uart1", ESP32S31_CLK_KIND_UART1,
++				    ESP32S31_XTAL_RATE);
++	if (ret)
++		return ret;
++	ret = esp32s31_register_clk(dev, priv, ESP32S31_CLK_UART2,
++				    "uart2", ESP32S31_CLK_KIND_UART2,
++				    ESP32S31_XTAL_RATE);
++	if (ret)
++		return ret;
++	ret = esp32s31_register_clk(dev, priv, ESP32S31_CLK_WDT1,
++				    "wdt1", ESP32S31_CLK_KIND_WDT1,
++				    ESP32S31_XTAL_RATE);
++	if (ret)
++		return ret;
++	ret = esp32s31_register_gate(dev, priv, ESP32S31_CLK_WDT0, "wdt0",
++				     ESP32S31_XTAL_RATE, 0x114,
++				     BIT(0) | BIT(11), BIT(1), BIT(2));
++	if (ret)
++		return ret;
++	ret = esp32s31_register_gate(dev, priv, ESP32S31_CLK_SYSTIMER,
++				     "systimer", 16000000UL, 0x120,
++				     BIT(0) | BIT(4), BIT(1), BIT(2));
++	if (ret)
++		return ret;
++	ret = esp32s31_register_gate(dev, priv, ESP32S31_CLK_AHB_GDMA,
++				     "ahb-gdma", sys_rate, 0x7c,
++				     BIT(0), BIT(1), BIT(2));
++	if (ret)
++		return ret;
++	ret = esp32s31_register_gate(dev, priv, ESP32S31_CLK_UHCI,
++				     "uhci", sys_rate, 0x84,
++				     BIT(0) | BIT(1), BIT(2), BIT(3));
++	if (ret)
++		return ret;
++	ret = esp32s31_register_gate(dev, priv, ESP32S31_CLK_LEDC0, "ledc0",
++				     ESP32S31_XTAL_RATE, 0x148,
++				     BIT(0) | BIT(5), BIT(1), BIT(2));
++	if (ret)
++		return ret;
++	ret = esp32s31_register_gate(dev, priv, ESP32S31_CLK_LEDC1, "ledc1",
++				     ESP32S31_XTAL_RATE, 0x148,
++				     BIT(6) | BIT(11), BIT(7), BIT(8));
++	if (ret)
++		return ret;
++	ret = esp32s31_register_gate(dev, priv, ESP32S31_CLK_MCPWM0, "mcpwm0",
++				     sys_rate, 0x124,
++				     BIT(0) | BIT(5), BIT(1), BIT(2));
++	if (ret)
++		return ret;
++	ret = esp32s31_register_gate(dev, priv, ESP32S31_CLK_MCPWM1, "mcpwm1",
++				     sys_rate, 0x128,
++				     BIT(0) | BIT(5), BIT(1), BIT(2));
++	if (ret)
++		return ret;
++	ret = esp32s31_register_gate(dev, priv, ESP32S31_CLK_MCPWM2, "mcpwm2",
++				     sys_rate, 0x12c,
++				     BIT(0) | BIT(5), BIT(1), BIT(2));
++	if (ret)
++		return ret;
++	ret = esp32s31_register_gate(dev, priv, ESP32S31_CLK_MCPWM3, "mcpwm3",
++				     sys_rate, 0x130,
++				     BIT(0) | BIT(5), BIT(1), BIT(2));
++	if (ret)
++		return ret;
++	ret = esp32s31_register_gate(dev, priv, ESP32S31_CLK_PCNT0, "pcnt0",
++				     apb_rate, 0x138,
++				     BIT(0), BIT(1), BIT(2));
++	if (ret)
++		return ret;
++	ret = esp32s31_register_gate(dev, priv, ESP32S31_CLK_PCNT1, "pcnt1",
++				     apb_rate, 0x138,
++				     BIT(3), BIT(4), BIT(5));
++	if (ret)
++		return ret;
++	ret = esp32s31_register_gate(dev, priv, ESP32S31_CLK_I2C0, "i2c0",
++				     ESP32S31_XTAL_RATE, 0xdc,
++				     BIT(0) | BIT(4), BIT(1), BIT(2));
++	if (ret)
++		return ret;
++	ret = esp32s31_register_gate(dev, priv, ESP32S31_CLK_I2C1, "i2c1",
++				     ESP32S31_XTAL_RATE, 0xe0,
++				     BIT(0) | BIT(4), BIT(1), BIT(2));
++	if (ret)
++		return ret;
++	ret = esp32s31_register_clk(dev, priv, ESP32S31_CLK_TWAI0, "twai0",
++				    ESP32S31_CLK_KIND_TWAI0,
++				    80000000UL);
++	if (ret)
++		return ret;
++	ret = esp32s31_register_clk(dev, priv, ESP32S31_CLK_TWAI1, "twai1",
++				    ESP32S31_CLK_KIND_TWAI1,
++				    80000000UL);
++	if (ret)
++		return ret;
++	ret = esp32s31_register_clk(dev, priv, ESP32S31_CLK_UART3,
++				    "uart3", ESP32S31_CLK_KIND_UART3,
++				    ESP32S31_XTAL_RATE);
++	if (ret)
++		return ret;
++	ret = esp32s31_register_clk(dev, priv, ESP32S31_CLK_GPSPI2,
++				    "gpspi2", ESP32S31_CLK_KIND_GPSPI2,
++				    ESP32S31_GPSPI_RATE);
++	if (ret)
++		return ret;
++	ret = esp32s31_register_clk(dev, priv, ESP32S31_CLK_GPSPI3,
++				    "gpspi3", ESP32S31_CLK_KIND_GPSPI3,
++				    ESP32S31_GPSPI_RATE);
++	if (ret)
++		return ret;
++	ret = esp32s31_register_clk(dev, priv, ESP32S31_CLK_I2S0,
++				    "i2s0", ESP32S31_CLK_KIND_I2S0,
++				    12288000UL);
++	if (ret)
++		return ret;
++	ret = esp32s31_register_clk(dev, priv, ESP32S31_CLK_I2S1,
++				    "i2s1", ESP32S31_CLK_KIND_I2S1,
++				    12288000UL);
++	if (ret)
++		return ret;
++
++	priv->rcdev.owner = THIS_MODULE;
++	priv->rcdev.nr_resets = ESP32S31_RST_NR;
++	priv->rcdev.ops = &esp32s31_reset_ops;
++	priv->rcdev.of_node = dev->of_node;
++	priv->rcdev.dev = dev;
++	ret = devm_reset_controller_register(dev, &priv->rcdev);
++	if (ret)
++		return dev_err_probe(dev, ret,
++				     "failed to register reset controller\n");
++
++	ret = devm_of_clk_add_hw_provider(dev, of_clk_hw_onecell_get, onecell);
++	if (ret)
++		return ret;
++
++	platform_set_drvdata(pdev, priv);
++	ret = devm_register_sys_off_handler(dev, SYS_OFF_MODE_POWER_OFF_PREPARE,
++					 SYS_OFF_PRIO_DEFAULT,
++					 esp32s31_clk_poweroff_prepare, priv);
++	if (ret)
++		return dev_err_probe(dev, ret, "poweroff clock handoff unavailable\n");
++	ret = devm_device_add_group(dev, &esp32s31_clk_attr_group);
++	if (ret)
++		return dev_err_probe(dev, ret,
++				     "failed to add clock state attributes\n");
++	dev_info(dev, "boot clocks: cpu=%lu mem=%lu sys=%lu apb=%lu Hz\n",
++		 clk_hw_get_rate(onecell->hws[ESP32S31_CLK_CPU]),
++		 clk_hw_get_rate(onecell->hws[ESP32S31_CLK_MEM]), sys_rate, apb_rate);
++
++	return 0;
++}
++
++/* Power-off must also work without loading the optional LP remoteproc.
++ * This phase still has both harts online for SOC_CLK_UPDATE. */
++static int esp32s31_clk_poweroff_prepare(struct sys_off_data *data)
++{
++	struct esp32s31_clk_priv *priv = data->cb_data;
++	struct clk *cpu;
++	int ret;
++
++	cpu = clk_hw_get_clk(priv->onecell->hws[ESP32S31_CLK_CPU], NULL);
++	if (IS_ERR(cpu))
++		return NOTIFY_BAD;
++	ret = clk_set_rate(cpu, ESP32S31_XTAL_RATE);
++	clk_put(cpu);
++	if (ret)
++		pr_err("S31 poweroff: XTAL handoff failed: %d\n", ret);
++	return ret ? NOTIFY_BAD : NOTIFY_DONE;
++}
++
++static const struct of_device_id esp32s31_clk_of_match[] = {
++	{ .compatible = "espressif,esp32s31-clock" },
++	{ }
++};
++
++static struct platform_driver esp32s31_clk_driver = {
++	.probe = esp32s31_clk_probe,
++	.driver = {
++		.name = "esp32s31-clock",
++		.of_match_table = esp32s31_clk_of_match,
++	},
++};
++builtin_platform_driver(esp32s31_clk_driver);
++
++MODULE_DESCRIPTION("ESP32-S31 clock/reset controller");
++MODULE_LICENSE("GPL");
+--- /dev/null
++++ b/drivers/pinctrl/pinctrl-esp32s31.c
+@@ -0,0 +1,1221 @@
++// SPDX-License-Identifier: GPL-2.0-only
++/*
++ * ESP32-S31 pin controller, GPIO and GPIO interrupt driver
++ *
++ * Register definitions and behaviour are derived from the ESP-IDF S31 GPIO
++ * low-level implementation and generated S31 GPIO/IO_MUX register headers.
++ */
++
++#include <linux/bitfield.h>
++#include <linux/bitmap.h>
++#include <linux/gpio/driver.h>
++#include <linux/interrupt.h>
++#include <linux/io.h>
++#include <linux/module.h>
++#include <linux/of.h>
++#include <linux/platform_device.h>
++#include <linux/seq_file.h>
++#include <linux/spinlock.h>
++
++#include <linux/pinctrl/pinconf-generic.h>
++#include <linux/pinctrl/pinconf.h>
++#include <linux/pinctrl/pinctrl.h>
++#include <linux/pinctrl/pinmux.h>
++
++#include <dt-bindings/pinctrl/esp32s31-pinmux.h>
++
++#include "core.h"
++#include "pinconf.h"
++#include "pinctrl-utils.h"
++#include "pinmux.h"
++
++#define ESP32S31_GPIO_NR		62
++#define ESP32S31_GPIO_VALID_MASK	(GENMASK_ULL(61, 0) & ~BIT_ULL(29) & \
++						 ~BIT_ULL(41))
++
++/* GPIO register block. */
++#define GPIO_OUT		0x004
++#define GPIO_OUT_W1TS		0x008
++#define GPIO_OUT_W1TC		0x00c
++#define GPIO_OUT1		0x010
++#define GPIO_OUT1_W1TS		0x014
++#define GPIO_OUT1_W1TC		0x018
++#define GPIO_ENABLE		0x034
++#define GPIO_ENABLE_W1TS	0x038
++#define GPIO_ENABLE_W1TC	0x03c
++#define GPIO_ENABLE1		0x040
++#define GPIO_ENABLE1_W1TS	0x044
++#define GPIO_ENABLE1_W1TC	0x048
++#define GPIO_IN			0x064
++#define GPIO_IN1		0x068
++#define GPIO_STATUS		0x074
++#define GPIO_STATUS_W1TC	0x07c
++#define GPIO_STATUS1		0x080
++#define GPIO_STATUS1_W1TC	0x088
++#define GPIO_INT0		0x0a4
++#define GPIO_INT0_1		0x0b4
++#define GPIO_PIN_BASE		0x0f4
++#define GPIO_PIN_STRIDE		4
++#define GPIO_FUNC_IN_BASE	0x2f4
++#define GPIO_FUNC_OUT_BASE	0xaf4
++#define GPIO_CLOCK_GATE		0xdf8
++#define GPIO_CLOCK_GATE_EN	BIT(0)
++
++#define GPIO_PIN_PAD_DRIVER	BIT(2)
++#define GPIO_PIN_INT_TYPE	GENMASK(9, 7)
++#define GPIO_PIN_WAKEUP_ENABLE	BIT(10)
++#define GPIO_PIN_INT_ENA		GENMASK(17, 13)
++#define GPIO_PIN_INT0_ENA	BIT(13)
++
++#define GPIO_FUNC_IN_SEL		GENMASK(7, 0)
++#define GPIO_FUNC_IN_INV		BIT(8)
++#define GPIO_FUNC_IN_MATRIX	BIT(9)
++
++#define GPIO_FUNC_OUT_SEL	GENMASK(8, 0)
++#define GPIO_FUNC_OUT_INV	BIT(9)
++#define GPIO_FUNC_OUT_OEN_SEL	BIT(10)
++#define GPIO_FUNC_OUT_OEN_INV	BIT(11)
++
++/* IO_MUX has one 32-bit register per GPIO. */
++#define IOMUX_SLP_OE		BIT(0)
++#define IOMUX_SLP_SEL		BIT(1)
++#define IOMUX_SLP_PD		BIT(2)
++#define IOMUX_SLP_PU		BIT(3)
++#define IOMUX_SLP_IE		BIT(4)
++#define IOMUX_SLP_DRV		GENMASK(6, 5)
++#define IOMUX_FUN_PD		BIT(7)
++#define IOMUX_FUN_PU		BIT(8)
++#define IOMUX_FUN_IE		BIT(9)
++#define IOMUX_FUN_DRV		GENMASK(11, 10)
++#define IOMUX_MCU_SEL		GENMASK(14, 12)
++#define IOMUX_FILTER_EN		BIT(15)
++#define IOMUX_HYS_EN		BIT(16)
++#define IOMUX_HYS_SEL		BIT(17)
++#define IOMUX_GPIO_FUNC		1
++
++/* Dedicated control selection for the connectivity-domain pads. */
++#define CNNT_PAD_CTRL			0x3f4
++#define CNNT_PAD_CLOCK_GATE		0x3f8
++#define CNNT_PAD_SDIO_DEDICATED		BIT(0)
++#define CNNT_PAD_GMAC_DEDICATED		BIT(1)
++#define CNNT_PAD_CLOCK_GATE_EN		BIT(0)
++
++enum esp32s31_gpio_irq_type {
++	ESP32S31_GPIO_INTR_DISABLE,
++	ESP32S31_GPIO_INTR_POSEDGE,
++	ESP32S31_GPIO_INTR_NEGEDGE,
++	ESP32S31_GPIO_INTR_ANYEDGE,
++	ESP32S31_GPIO_INTR_LOW_LEVEL,
++	ESP32S31_GPIO_INTR_HIGH_LEVEL,
++};
++
++enum esp32s31_pinmux_type {
++	ESP32S31_MUX_IOMUX = ESP32S31_PINMUX_TYPE_IOMUX,
++	ESP32S31_MUX_MATRIX_OUT = ESP32S31_PINMUX_TYPE_MATRIX_OUT,
++	ESP32S31_MUX_MATRIX_IN = ESP32S31_PINMUX_TYPE_MATRIX_IN,
++	ESP32S31_MUX_IOMUX_IN = ESP32S31_PINMUX_TYPE_IOMUX_IN,
++};
++
++struct esp32s31_pinmux_entry {
++	u8 pin;
++	u8 type;
++	u8 function;
++	u16 value;
++	bool invert;
++	bool oen_invert;
++	bool gpio_oen;
++};
++
++struct esp32s31_pin_group {
++	struct esp32s31_pinmux_entry *entries;
++	unsigned int nentries;
++};
++
++struct esp32s31_pinctrl {
++	struct device *dev;
++	void __iomem *gpio_base;
++	void __iomem *iomux_base;
++	void __iomem *cnnt_pad_base;
++	raw_spinlock_t lock;
++	struct mutex groups_lock;
++
++	struct pinctrl_dev *pctldev;
++	struct pinctrl_desc pdesc;
++	struct pinctrl_pin_desc *pins;
++
++	struct gpio_chip gc;
++	u8 irq_types[ESP32S31_GPIO_NR];
++	u8 mux_function[ESP32S31_GPIO_NR];
++	u8 gmac_dedicated_users;
++	u8 sdio_dedicated_users;
++};
++
++static u64 esp32s31_bitmap_to_u64(const unsigned long *bitmap)
++{
++#if BITS_PER_LONG == 64
++	return bitmap[0];
++#else
++	return bitmap[0] | (u64)bitmap[1] << 32;
++#endif
++}
++
++static bool esp32s31_valid_pin(unsigned int pin)
++{
++	return pin < ESP32S31_GPIO_NR &&
++	       (ESP32S31_GPIO_VALID_MASK & BIT_ULL(pin));
++}
++
++static void __iomem *esp32s31_pin_reg(struct esp32s31_pinctrl *pctl,
++				      unsigned int pin)
++{
++	return pctl->gpio_base + GPIO_PIN_BASE + pin * GPIO_PIN_STRIDE;
++}
++
++static void __iomem *esp32s31_iomux_reg(struct esp32s31_pinctrl *pctl,
++					unsigned int pin)
++{
++	return pctl->iomux_base + pin * sizeof(u32);
++}
++
++static void __iomem *esp32s31_out_sel_reg(struct esp32s31_pinctrl *pctl,
++					  unsigned int pin)
++{
++	return pctl->gpio_base + GPIO_FUNC_OUT_BASE + pin * sizeof(u32);
++}
++
++static void esp32s31_update_bits(struct esp32s31_pinctrl *pctl,
++				 void __iomem *reg, u32 mask, u32 value)
++{
++	unsigned long flags;
++	u32 tmp;
++
++	raw_spin_lock_irqsave(&pctl->lock, flags);
++	tmp = readl_relaxed(reg);
++	tmp = (tmp & ~mask) | (value & mask);
++	writel_relaxed(tmp, reg);
++	raw_spin_unlock_irqrestore(&pctl->lock, flags);
++}
++
++static int esp32s31_pinctrl_get_groups_count(struct pinctrl_dev *pctldev)
++{
++	return pinctrl_generic_get_group_count(pctldev);
++}
++
++static const char *esp32s31_pinctrl_get_group_name(struct pinctrl_dev *pctldev,
++						    unsigned int selector)
++{
++	return pinctrl_generic_get_group_name(pctldev, selector);
++}
++
++static int esp32s31_pinctrl_get_group_pins(struct pinctrl_dev *pctldev,
++					   unsigned int selector,
++					   const unsigned int **pins,
++					   unsigned int *npins)
++{
++	return pinctrl_generic_get_group_pins(pctldev, selector, pins, npins);
++}
++
++static int esp32s31_find_group_selector(struct pinctrl_dev *pctldev,
++					const char *name)
++{
++	unsigned int selector, count = pinctrl_generic_get_group_count(pctldev);
++
++	for (selector = 0; selector < count; selector++) {
++		const char *candidate =
++			pinctrl_generic_get_group_name(pctldev, selector);
++
++		if (candidate && !strcmp(candidate, name))
++			return selector;
++	}
++	return -EINVAL;
++}
++
++static void esp32s31_pinctrl_pin_dbg_show(struct pinctrl_dev *pctldev,
++					  struct seq_file *s,
++					  unsigned int pin)
++{
++	struct esp32s31_pinctrl *pctl = pinctrl_dev_get_drvdata(pctldev);
++
++	seq_printf(s, " iomux=%08x out_sel=%08x pin=%08x",
++		   readl_relaxed(esp32s31_iomux_reg(pctl, pin)),
++		   readl_relaxed(esp32s31_out_sel_reg(pctl, pin)),
++		   readl_relaxed(esp32s31_pin_reg(pctl, pin)));
++}
++
++static int esp32s31_decode_pinmux(struct device *dev, u32 cell,
++				  struct esp32s31_pinmux_entry *entry)
++{
++	u32 type = (cell >> ESP32S31_PINMUX_TYPE_SHIFT) & 0x3;
++	u32 value = (cell >> 8) & 0x1ff;
++	u32 pin = cell & 0xff;
++
++	if (!esp32s31_valid_pin(pin) &&
++	    !(type == ESP32S31_MUX_MATRIX_IN &&
++	      (pin == ESP32S31_MATRIX_CONST_ONE ||
++	       pin == ESP32S31_MATRIX_CONST_ZERO))) {
++		dev_err(dev, "invalid GPIO%u in pinmux cell %#x\n", pin, cell);
++		return -EINVAL;
++	}
++
++	if (type > ESP32S31_MUX_IOMUX_IN ||
++	    (type == ESP32S31_MUX_IOMUX && value > 7) ||
++	    (type == ESP32S31_MUX_IOMUX_IN && value > 255) ||
++	    (type == ESP32S31_MUX_MATRIX_IN && value > 255) ||
++	    (type == ESP32S31_MUX_MATRIX_OUT && value > 256)) {
++		dev_err(dev, "invalid pinmux cell %#x\n", cell);
++		return -EINVAL;
++	}
++
++	entry->pin = pin;
++	entry->type = type;
++	entry->value = value;
++	entry->function = type == ESP32S31_MUX_IOMUX_IN ?
++			  (cell >> 20) & 0x7 : 0;
++	entry->invert = !!(cell & ESP32S31_PINMUX_INVERT);
++	entry->oen_invert = !!(cell & ESP32S31_PINMUX_OEN_INVERT);
++	entry->gpio_oen = !!(cell & ESP32S31_PINMUX_GPIO_OEN);
++
++	if (type == ESP32S31_MUX_IOMUX &&
++	    cell & (ESP32S31_PINMUX_INVERT | ESP32S31_PINMUX_OEN_INVERT |
++		    ESP32S31_PINMUX_GPIO_OEN))
++		return -EINVAL;
++
++	return 0;
++}
++
++static int esp32s31_pinctrl_dt_node_to_map(struct pinctrl_dev *pctldev,
++					   struct device_node *np,
++					   struct pinctrl_map **maps,
++					   unsigned int *num_maps)
++{
++	struct esp32s31_pinctrl *pctl = pinctrl_dev_get_drvdata(pctldev);
++	struct device_node *child;
++	struct pinctrl_map *map;
++	const char **group_names;
++	unsigned int ngroups = 0, nmaps = 0;
++	int ret = 0;
++
++	for_each_available_child_of_node(np, child)
++		ngroups++;
++	if (!ngroups)
++		return -EINVAL;
++
++	group_names = devm_kcalloc(pctl->dev, ngroups, sizeof(*group_names),
++				   GFP_KERNEL);
++	if (!group_names)
++		return -ENOMEM;
++
++	map = kcalloc(ngroups * 2, sizeof(*map), GFP_KERNEL);
++	if (!map)
++		return -ENOMEM;
++
++	ngroups = 0;
++	mutex_lock(&pctl->groups_lock);
++	for_each_available_child_of_node(np, child) {
++		struct esp32s31_pin_group *group;
++		unsigned int *pins;
++		unsigned long seen[BITS_TO_LONGS(ESP32S31_GPIO_NR)] = {};
++		const char *name;
++		int nentries, npins = 0, i;
++
++		nentries = of_property_count_u32_elems(child, "pinmux");
++		if (nentries <= 0) {
++			dev_err(pctl->dev, "%pOF: pinmux is required\n", child);
++			ret = -EINVAL;
++			goto err_put_child;
++		}
++
++		name = devm_kasprintf(pctl->dev, GFP_KERNEL, "%pOFn.%pOFn",
++				       np, child);
++		group = devm_kzalloc(pctl->dev, sizeof(*group), GFP_KERNEL);
++		pins = devm_kcalloc(pctl->dev, nentries, sizeof(*pins), GFP_KERNEL);
++		if (!name || !group || !pins) {
++			ret = -ENOMEM;
++			goto err_put_child;
++		}
++
++		group->entries = devm_kcalloc(pctl->dev, nentries,
++					      sizeof(*group->entries), GFP_KERNEL);
++		if (!group->entries) {
++			ret = -ENOMEM;
++			goto err_put_child;
++		}
++		group->nentries = nentries;
++
++		for (i = 0; i < nentries; i++) {
++			u32 cell;
++
++			ret = of_property_read_u32_index(child, "pinmux", i, &cell);
++			if (ret)
++				goto err_put_child;
++			ret = esp32s31_decode_pinmux(pctl->dev, cell,
++						      &group->entries[i]);
++			if (ret)
++				goto err_put_child;
++			if (esp32s31_valid_pin(group->entries[i].pin) &&
++			    !test_and_set_bit(group->entries[i].pin, seen))
++				pins[npins++] = group->entries[i].pin;
++		}
++
++		ret = esp32s31_find_group_selector(pctldev, name);
++		if (ret >= 0) {
++			struct group_desc *old = pinctrl_generic_get_group(pctldev,
++									ret);
++
++			/* A same-name overlay is being reloaded with new routes. */
++			old->grp.pins = pins;
++			old->grp.npins = npins;
++			old->data = group;
++		} else {
++			ret = pinctrl_generic_add_group(pctldev, name, pins, npins,
++						group);
++			if (ret < 0)
++				goto err_put_child;
++		}
++
++		group_names[ngroups++] = name;
++		map[nmaps].type = PIN_MAP_TYPE_MUX_GROUP;
++		map[nmaps].data.mux.function = np->name;
++		map[nmaps].data.mux.group = name;
++		nmaps++;
++
++		ret = pinconf_generic_parse_dt_config(child, pctldev,
++				&map[nmaps].data.configs.configs,
++				&map[nmaps].data.configs.num_configs);
++		if (ret)
++			goto err_put_child;
++		if (map[nmaps].data.configs.num_configs) {
++			map[nmaps].type = PIN_MAP_TYPE_CONFIGS_GROUP;
++			map[nmaps].data.configs.group_or_pin = name;
++			nmaps++;
++		}
++	}
++
++	ret = pinmux_generic_add_function(pctldev, np->name, group_names,
++					  ngroups, NULL);
++	if (ret < 0)
++		goto err_free;
++	{
++		const struct function_desc *function =
++			pinmux_generic_get_function(pctldev, ret);
++		struct pinfunction *pinfunc = (struct pinfunction *)function->func;
++
++		/* pinmux_generic_add_function returns the existing selector too. */
++		pinfunc->groups = group_names;
++		pinfunc->ngroups = ngroups;
++	}
++
++	*maps = map;
++	*num_maps = nmaps;
++	mutex_unlock(&pctl->groups_lock);
++	return 0;
++
++err_put_child:
++	of_node_put(child);
++err_free:
++	pinctrl_utils_free_map(pctldev, map, nmaps);
++	mutex_unlock(&pctl->groups_lock);
++	return ret;
++}
++
++static const struct pinctrl_ops esp32s31_pinctrl_ops = {
++	.get_groups_count = esp32s31_pinctrl_get_groups_count,
++	.get_group_name = esp32s31_pinctrl_get_group_name,
++	.get_group_pins = esp32s31_pinctrl_get_group_pins,
++	.pin_dbg_show = esp32s31_pinctrl_pin_dbg_show,
++	.dt_node_to_map = esp32s31_pinctrl_dt_node_to_map,
++	.dt_free_map = pinctrl_utils_free_map,
++};
++
++static void esp32s31_set_iomux(struct esp32s31_pinctrl *pctl,
++			       unsigned int pin, unsigned int function)
++{
++	unsigned long flags;
++	u32 val;
++	u8 old_function;
++
++	raw_spin_lock_irqsave(&pctl->lock, flags);
++	old_function = pctl->mux_function[pin];
++	if (pin >= 8 && pin <= 19) {
++		if (old_function == 2 && function != 2)
++			pctl->gmac_dedicated_users--;
++		else if (old_function != 2 && function == 2)
++			pctl->gmac_dedicated_users++;
++	}
++	if (pin >= 20 && pin <= 25) {
++		if (old_function == 4 && function != 4)
++			pctl->sdio_dedicated_users--;
++		else if (old_function != 4 && function == 4)
++			pctl->sdio_dedicated_users++;
++	}
++	pctl->mux_function[pin] = function;
++
++	val = readl_relaxed(pctl->cnnt_pad_base + CNNT_PAD_CTRL);
++	if (pctl->gmac_dedicated_users)
++		val |= CNNT_PAD_GMAC_DEDICATED;
++	else
++		val &= ~CNNT_PAD_GMAC_DEDICATED;
++	if (pctl->sdio_dedicated_users)
++		val |= CNNT_PAD_SDIO_DEDICATED;
++	else
++		val &= ~CNNT_PAD_SDIO_DEDICATED;
++	writel_relaxed(val, pctl->cnnt_pad_base + CNNT_PAD_CTRL);
++
++	val = readl_relaxed(esp32s31_iomux_reg(pctl, pin));
++	val &= ~IOMUX_MCU_SEL;
++	val |= FIELD_PREP(IOMUX_MCU_SEL, function);
++	writel_relaxed(val, esp32s31_iomux_reg(pctl, pin));
++	raw_spin_unlock_irqrestore(&pctl->lock, flags);
++}
++
++static void esp32s31_pinmux_make_safe(struct esp32s31_pinctrl *pctl,
++				      unsigned int pin)
++{
++	u32 reg, val;
++	unsigned int signal;
++
++	reg = pin < 32 ? GPIO_ENABLE_W1TC : GPIO_ENABLE1_W1TC;
++	writel_relaxed(BIT(pin % 32), pctl->gpio_base + reg);
++
++	for (signal = 0; signal < 256; signal++) {
++		void __iomem *input = pctl->gpio_base + GPIO_FUNC_IN_BASE +
++				      signal * sizeof(u32);
++
++		val = readl_relaxed(input);
++		if ((val & GPIO_FUNC_IN_MATRIX) &&
++		    FIELD_GET(GPIO_FUNC_IN_SEL, val) == pin)
++			esp32s31_update_bits(pctl, input,
++				GPIO_FUNC_IN_SEL | GPIO_FUNC_IN_INV |
++				GPIO_FUNC_IN_MATRIX,
++				FIELD_PREP(GPIO_FUNC_IN_SEL,
++					   ESP32S31_MATRIX_CONST_ZERO) |
++				GPIO_FUNC_IN_MATRIX);
++	}
++
++	esp32s31_update_bits(pctl, esp32s31_out_sel_reg(pctl, pin),
++		GPIO_FUNC_OUT_SEL | GPIO_FUNC_OUT_INV | GPIO_FUNC_OUT_OEN_SEL |
++		GPIO_FUNC_OUT_OEN_INV,
++		FIELD_PREP(GPIO_FUNC_OUT_SEL, ESP32S31_MATRIX_GPIO_OUT) |
++		GPIO_FUNC_OUT_OEN_SEL);
++	esp32s31_update_bits(pctl, esp32s31_pin_reg(pctl, pin),
++		GPIO_PIN_INT_ENA | GPIO_PIN_PAD_DRIVER, 0);
++	esp32s31_set_iomux(pctl, pin, IOMUX_GPIO_FUNC);
++	esp32s31_update_bits(pctl, esp32s31_iomux_reg(pctl, pin),
++		IOMUX_FUN_IE | IOMUX_FUN_PU | IOMUX_FUN_PD, 0);
++	reg = pin < 32 ? GPIO_STATUS_W1TC : GPIO_STATUS1_W1TC;
++	writel_relaxed(BIT(pin % 32), pctl->gpio_base + reg);
++}
++
++static int esp32s31_pinmux_free(struct pinctrl_dev *pctldev,
++				unsigned int pin)
++{
++	struct esp32s31_pinctrl *pctl = pinctrl_dev_get_drvdata(pctldev);
++
++	if (!esp32s31_valid_pin(pin))
++		return -EINVAL;
++	esp32s31_pinmux_make_safe(pctl, pin);
++	return 0;
++}
++
++static void esp32s31_pinmux_gpio_disable_free(struct pinctrl_dev *pctldev,
++					       struct pinctrl_gpio_range *range,
++					       unsigned int pin)
++{
++	struct esp32s31_pinctrl *pctl = pinctrl_dev_get_drvdata(pctldev);
++
++	if (esp32s31_valid_pin(pin))
++		esp32s31_pinmux_make_safe(pctl, pin);
++}
++
++static void esp32s31_set_matrix_output(struct esp32s31_pinctrl *pctl,
++				       const struct esp32s31_pinmux_entry *entry)
++{
++	u32 enable_reg = entry->pin < 32 ? GPIO_ENABLE_W1TS :
++					       GPIO_ENABLE1_W1TS;
++	u32 mask = GPIO_FUNC_OUT_SEL | GPIO_FUNC_OUT_INV |
++		   GPIO_FUNC_OUT_OEN_SEL | GPIO_FUNC_OUT_OEN_INV;
++	u32 val = FIELD_PREP(GPIO_FUNC_OUT_SEL, entry->value);
++
++	if (entry->invert)
++		val |= GPIO_FUNC_OUT_INV;
++	if (entry->gpio_oen)
++		val |= GPIO_FUNC_OUT_OEN_SEL;
++	if (entry->oen_invert)
++		val |= GPIO_FUNC_OUT_OEN_INV;
++
++	esp32s31_set_iomux(pctl, entry->pin, IOMUX_GPIO_FUNC);
++	esp32s31_update_bits(pctl, esp32s31_out_sel_reg(pctl, entry->pin),
++			       mask, val);
++
++	/*
++	 * Match esp_rom_gpio_connect_out_signal(): selecting a matrix source is
++	 * not sufficient by itself; the pad output path must also be enabled.
++	 * pinmux_free() returns it to input/high-Z when the state is released.
++	 */
++	writel_relaxed(BIT(entry->pin % 32), pctl->gpio_base + enable_reg);
++}
++
++static void esp32s31_set_matrix_input(struct esp32s31_pinctrl *pctl,
++				      const struct esp32s31_pinmux_entry *entry)
++{
++	void __iomem *reg = pctl->gpio_base + GPIO_FUNC_IN_BASE +
++			    entry->value * sizeof(u32);
++	u32 val = FIELD_PREP(GPIO_FUNC_IN_SEL, entry->pin) |
++		  GPIO_FUNC_IN_MATRIX;
++
++	if (entry->invert)
++		val |= GPIO_FUNC_IN_INV;
++	esp32s31_update_bits(pctl, reg,
++			       GPIO_FUNC_IN_SEL | GPIO_FUNC_IN_INV |
++			       GPIO_FUNC_IN_MATRIX, val);
++	if (esp32s31_valid_pin(entry->pin))
++		esp32s31_update_bits(pctl,
++				       esp32s31_iomux_reg(pctl, entry->pin),
++				       IOMUX_FUN_IE, IOMUX_FUN_IE);
++}
++
++static void esp32s31_set_iomux_input(struct esp32s31_pinctrl *pctl,
++				     const struct esp32s31_pinmux_entry *entry)
++{
++	void __iomem *reg = pctl->gpio_base + GPIO_FUNC_IN_BASE +
++			    entry->value * sizeof(u32);
++
++	esp32s31_update_bits(pctl, reg, GPIO_FUNC_IN_MATRIX, 0);
++	esp32s31_set_iomux(pctl, entry->pin, entry->function);
++	esp32s31_update_bits(pctl, esp32s31_iomux_reg(pctl, entry->pin),
++			       IOMUX_FUN_IE, IOMUX_FUN_IE);
++}
++
++static int esp32s31_pinmux_set_mux(struct pinctrl_dev *pctldev,
++				   unsigned int function,
++				   unsigned int group_selector)
++{
++	struct esp32s31_pinctrl *pctl = pinctrl_dev_get_drvdata(pctldev);
++	const struct group_desc *desc;
++	struct esp32s31_pin_group *group;
++	unsigned int i;
++
++	desc = pinctrl_generic_get_group(pctldev, group_selector);
++	if (!desc)
++		return -EINVAL;
++	group = desc->data;
++
++	for (i = 0; i < group->nentries; i++) {
++		struct esp32s31_pinmux_entry *entry = &group->entries[i];
++
++		switch (entry->type) {
++		case ESP32S31_MUX_IOMUX:
++			esp32s31_set_iomux(pctl, entry->pin, entry->value);
++			break;
++		case ESP32S31_MUX_MATRIX_OUT:
++			esp32s31_set_matrix_output(pctl, entry);
++			break;
++		case ESP32S31_MUX_MATRIX_IN:
++			esp32s31_set_matrix_input(pctl, entry);
++			break;
++		case ESP32S31_MUX_IOMUX_IN:
++			esp32s31_set_iomux_input(pctl, entry);
++			break;
++		default:
++			return -EINVAL;
++		}
++	}
++
++	return 0;
++}
++
++static int esp32s31_pinmux_gpio_request(struct pinctrl_dev *pctldev,
++					struct pinctrl_gpio_range *range,
++					unsigned int pin)
++{
++	struct esp32s31_pinctrl *pctl = pinctrl_dev_get_drvdata(pctldev);
++	struct esp32s31_pinmux_entry entry = {
++		.pin = pin,
++		.type = ESP32S31_MUX_MATRIX_OUT,
++		.value = ESP32S31_MATRIX_GPIO_OUT,
++		.gpio_oen = true,
++	};
++
++	if (!esp32s31_valid_pin(pin))
++		return -EINVAL;
++	esp32s31_set_matrix_output(pctl, &entry);
++	return 0;
++}
++
++static const struct pinmux_ops esp32s31_pinmux_ops = {
++	.free = esp32s31_pinmux_free,
++	.get_functions_count = pinmux_generic_get_function_count,
++	.get_function_name = pinmux_generic_get_function_name,
++	.get_function_groups = pinmux_generic_get_function_groups,
++	.set_mux = esp32s31_pinmux_set_mux,
++	.gpio_request_enable = esp32s31_pinmux_gpio_request,
++	.gpio_disable_free = esp32s31_pinmux_gpio_disable_free,
++	.strict = true,
++};
++
++static int esp32s31_pinconf_get(struct pinctrl_dev *pctldev, unsigned int pin,
++				unsigned long *config)
++{
++	struct esp32s31_pinctrl *pctl = pinctrl_dev_get_drvdata(pctldev);
++	enum pin_config_param param = pinconf_to_config_param(*config);
++	u32 iomux, pinreg, arg;
++
++	if (!esp32s31_valid_pin(pin))
++		return -EINVAL;
++
++	iomux = readl_relaxed(esp32s31_iomux_reg(pctl, pin));
++	pinreg = readl_relaxed(esp32s31_pin_reg(pctl, pin));
++	switch (param) {
++	case PIN_CONFIG_BIAS_DISABLE:
++		if (iomux & (IOMUX_FUN_PU | IOMUX_FUN_PD))
++			return -EINVAL;
++		arg = 1;
++		break;
++	case PIN_CONFIG_BIAS_PULL_UP:
++		if (!(iomux & IOMUX_FUN_PU))
++			return -EINVAL;
++		arg = 1;
++		break;
++	case PIN_CONFIG_BIAS_PULL_DOWN:
++		if (!(iomux & IOMUX_FUN_PD))
++			return -EINVAL;
++		arg = 1;
++		break;
++	case PIN_CONFIG_INPUT_ENABLE:
++		if (!(iomux & IOMUX_FUN_IE))
++			return -EINVAL;
++		arg = 1;
++		break;
++	case PIN_CONFIG_INPUT_SCHMITT_ENABLE:
++		if ((iomux & (IOMUX_HYS_SEL | IOMUX_HYS_EN)) !=
++		    (IOMUX_HYS_SEL | IOMUX_HYS_EN))
++			return -EINVAL;
++		arg = 1;
++		break;
++	case PIN_CONFIG_DRIVE_OPEN_DRAIN:
++		if (!(pinreg & GPIO_PIN_PAD_DRIVER))
++			return -EINVAL;
++		arg = 1;
++		break;
++	case PIN_CONFIG_DRIVE_PUSH_PULL:
++		if (pinreg & GPIO_PIN_PAD_DRIVER)
++			return -EINVAL;
++		arg = 1;
++		break;
++	case PIN_CONFIG_DRIVE_STRENGTH:
++		switch (FIELD_GET(IOMUX_FUN_DRV, iomux)) {
++		case 0:
++			arg = 5;
++			break;
++		case 1:
++			arg = 10;
++			break;
++		case 2:
++			arg = 20;
++			break;
++		default:
++			arg = 40;
++			break;
++		}
++		break;
++	default:
++		return -ENOTSUPP;
++	}
++
++	*config = pinconf_to_config_packed(param, arg);
++	return 0;
++}
++
++static int esp32s31_pinconf_set(struct pinctrl_dev *pctldev, unsigned int pin,
++				unsigned long *configs, unsigned int nconfigs)
++{
++	struct esp32s31_pinctrl *pctl = pinctrl_dev_get_drvdata(pctldev);
++	unsigned int i;
++
++	if (!esp32s31_valid_pin(pin))
++		return -EINVAL;
++
++	for (i = 0; i < nconfigs; i++) {
++		enum pin_config_param param = pinconf_to_config_param(configs[i]);
++		u32 arg = pinconf_to_config_argument(configs[i]);
++		u32 mask, val;
++		void __iomem *reg = esp32s31_iomux_reg(pctl, pin);
++
++		switch (param) {
++		case PIN_CONFIG_BIAS_DISABLE:
++			mask = IOMUX_FUN_PU | IOMUX_FUN_PD;
++			val = 0;
++			break;
++		case PIN_CONFIG_BIAS_PULL_UP:
++			mask = IOMUX_FUN_PU | IOMUX_FUN_PD;
++			val = arg ? IOMUX_FUN_PU : 0;
++			break;
++		case PIN_CONFIG_BIAS_PULL_DOWN:
++			mask = IOMUX_FUN_PU | IOMUX_FUN_PD;
++			val = arg ? IOMUX_FUN_PD : 0;
++			break;
++		case PIN_CONFIG_INPUT_ENABLE:
++			mask = IOMUX_FUN_IE;
++			val = arg ? IOMUX_FUN_IE : 0;
++			break;
++		case PIN_CONFIG_OUTPUT_ENABLE:
++			reg = pctl->gpio_base + (pin < 32 ?
++				(arg ? GPIO_ENABLE_W1TS : GPIO_ENABLE_W1TC) :
++				(arg ? GPIO_ENABLE1_W1TS : GPIO_ENABLE1_W1TC));
++			writel_relaxed(BIT(pin % 32), reg);
++			continue;
++		case PIN_CONFIG_INPUT_SCHMITT_ENABLE:
++			mask = IOMUX_HYS_SEL | IOMUX_HYS_EN;
++			val = IOMUX_HYS_SEL | (arg ? IOMUX_HYS_EN : 0);
++			break;
++		case PIN_CONFIG_INPUT_DEBOUNCE:
++			/* S31 provides a fixed pin glitch filter, not a timer. */
++			mask = IOMUX_FILTER_EN;
++			val = arg ? IOMUX_FILTER_EN : 0;
++			break;
++		case PIN_CONFIG_DRIVE_STRENGTH:
++			switch (arg) {
++			case 5:
++				val = 0;
++				break;
++			case 10:
++				val = 1;
++				break;
++			case 20:
++				val = 2;
++				break;
++			case 40:
++				val = 3;
++				break;
++			default:
++				return -EINVAL;
++			}
++			mask = IOMUX_FUN_DRV;
++			val = FIELD_PREP(IOMUX_FUN_DRV, val);
++			break;
++		case PIN_CONFIG_DRIVE_OPEN_DRAIN:
++		case PIN_CONFIG_DRIVE_PUSH_PULL:
++			reg = esp32s31_pin_reg(pctl, pin);
++			mask = GPIO_PIN_PAD_DRIVER;
++			val = param == PIN_CONFIG_DRIVE_OPEN_DRAIN ? mask : 0;
++			break;
++		case PIN_CONFIG_LEVEL:
++			pctl->gc.direction_output(&pctl->gc, pin, arg);
++			continue;
++		default:
++			return -ENOTSUPP;
++		}
++		esp32s31_update_bits(pctl, reg, mask, val);
++	}
++
++	return 0;
++}
++
++static int esp32s31_pinconf_group_get(struct pinctrl_dev *pctldev,
++				      unsigned int selector,
++				      unsigned long *config)
++{
++	const struct group_desc *group = pinctrl_generic_get_group(pctldev,
++								  selector);
++
++	if (!group || !group->grp.npins)
++		return -EINVAL;
++	return esp32s31_pinconf_get(pctldev, group->grp.pins[0], config);
++}
++
++static int esp32s31_pinconf_group_set(struct pinctrl_dev *pctldev,
++				      unsigned int selector,
++				      unsigned long *configs,
++				      unsigned int nconfigs)
++{
++	const struct group_desc *group = pinctrl_generic_get_group(pctldev,
++								  selector);
++	unsigned int i;
++	int ret;
++
++	if (!group)
++		return -EINVAL;
++	for (i = 0; i < group->grp.npins; i++) {
++		ret = esp32s31_pinconf_set(pctldev, group->grp.pins[i], configs,
++					   nconfigs);
++		if (ret)
++			return ret;
++	}
++	return 0;
++}
++
++static const struct pinconf_ops esp32s31_pinconf_ops = {
++	.is_generic = true,
++	.pin_config_get = esp32s31_pinconf_get,
++	.pin_config_set = esp32s31_pinconf_set,
++	.pin_config_group_get = esp32s31_pinconf_group_get,
++	.pin_config_group_set = esp32s31_pinconf_group_set,
++};
++
++static int esp32s31_gpio_init_valid_mask(struct gpio_chip *gc,
++					 unsigned long *valid_mask,
++					 unsigned int ngpios)
++{
++	/* Preserve gpio-reserved-ranges already applied by gpiolib. */
++	bitmap_clear(valid_mask, 29, 1);
++	bitmap_clear(valid_mask, 41, 1);
++	return 0;
++}
++
++static int esp32s31_gpio_get_direction(struct gpio_chip *gc,
++				       unsigned int offset)
++{
++	struct esp32s31_pinctrl *pctl = gpiochip_get_data(gc);
++	u32 reg = offset < 32 ? GPIO_ENABLE : GPIO_ENABLE1;
++	u32 bit = BIT(offset % 32);
++
++	return readl_relaxed(pctl->gpio_base + reg) & bit ?
++		GPIO_LINE_DIRECTION_OUT : GPIO_LINE_DIRECTION_IN;
++}
++
++static int esp32s31_gpio_direction_input(struct gpio_chip *gc,
++					 unsigned int offset)
++{
++	struct esp32s31_pinctrl *pctl = gpiochip_get_data(gc);
++	u32 reg = offset < 32 ? GPIO_ENABLE_W1TC : GPIO_ENABLE1_W1TC;
++
++	writel_relaxed(BIT(offset % 32), pctl->gpio_base + reg);
++	esp32s31_update_bits(pctl, esp32s31_iomux_reg(pctl, offset),
++			       IOMUX_FUN_IE, IOMUX_FUN_IE);
++	return 0;
++}
++
++static int esp32s31_gpio_set(struct gpio_chip *gc, unsigned int offset,
++			     int value)
++{
++	struct esp32s31_pinctrl *pctl = gpiochip_get_data(gc);
++	u32 reg;
++
++	if (offset < 32)
++		reg = value ? GPIO_OUT_W1TS : GPIO_OUT_W1TC;
++	else
++		reg = value ? GPIO_OUT1_W1TS : GPIO_OUT1_W1TC;
++	writel_relaxed(BIT(offset % 32), pctl->gpio_base + reg);
++	return 0;
++}
++
++static int esp32s31_gpio_direction_output(struct gpio_chip *gc,
++					  unsigned int offset, int value)
++{
++	struct esp32s31_pinctrl *pctl = gpiochip_get_data(gc);
++	u32 reg = offset < 32 ? GPIO_ENABLE_W1TS : GPIO_ENABLE1_W1TS;
++
++	/*
++	 * S31 has native open-drain support, but open-source is emulated by
++	 * gpiolib by switching between input and push-pull high.  A previous
++	 * open-drain user may have left PAD_DRIVER set after releasing the
++	 * line, so make sure the emulated high state can actively drive it.
++	 */
++	if (gpiochip_line_is_open_source(gc, offset))
++		esp32s31_update_bits(pctl, esp32s31_pin_reg(pctl, offset),
++				       GPIO_PIN_PAD_DRIVER, 0);
++
++	esp32s31_gpio_set(gc, offset, value);
++	writel_relaxed(BIT(offset % 32), pctl->gpio_base + reg);
++	return 0;
++}
++
++static int esp32s31_gpio_get(struct gpio_chip *gc, unsigned int offset)
++{
++	struct esp32s31_pinctrl *pctl = gpiochip_get_data(gc);
++	u32 reg = offset < 32 ? GPIO_IN : GPIO_IN1;
++
++	return !!(readl_relaxed(pctl->gpio_base + reg) & BIT(offset % 32));
++}
++
++static int esp32s31_gpio_get_multiple(struct gpio_chip *gc,
++				      unsigned long *mask,
++				      unsigned long *bits)
++{
++	struct esp32s31_pinctrl *pctl = gpiochip_get_data(gc);
++	u64 values = readl_relaxed(pctl->gpio_base + GPIO_IN);
++
++	values |= (u64)readl_relaxed(pctl->gpio_base + GPIO_IN1) << 32;
++	bitmap_from_u64(bits, values & esp32s31_bitmap_to_u64(mask));
++	return 0;
++}
++
++static int esp32s31_gpio_set_multiple(struct gpio_chip *gc,
++				      unsigned long *mask,
++				      unsigned long *bits)
++{
++	struct esp32s31_pinctrl *pctl = gpiochip_get_data(gc);
++	u64 m = esp32s31_bitmap_to_u64(mask);
++	u64 b = esp32s31_bitmap_to_u64(bits);
++
++	writel_relaxed((u32)(m & b), pctl->gpio_base + GPIO_OUT_W1TS);
++	writel_relaxed((u32)(m & ~b), pctl->gpio_base + GPIO_OUT_W1TC);
++	writel_relaxed((u32)((m & b) >> 32), pctl->gpio_base + GPIO_OUT1_W1TS);
++	writel_relaxed((u32)((m & ~b) >> 32), pctl->gpio_base + GPIO_OUT1_W1TC);
++	return 0;
++}
++
++static int esp32s31_gpio_set_config(struct gpio_chip *gc, unsigned int offset,
++				    unsigned long config)
++{
++	struct esp32s31_pinctrl *pctl = gpiochip_get_data(gc);
++
++	return esp32s31_pinconf_set(pctl->pctldev, offset, &config, 1);
++}
++
++static void esp32s31_gpio_irq_ack(struct irq_data *d)
++{
++	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
++	struct esp32s31_pinctrl *pctl = gpiochip_get_data(gc);
++	unsigned int pin = irqd_to_hwirq(d);
++	u32 reg = pin < 32 ? GPIO_STATUS_W1TC : GPIO_STATUS1_W1TC;
++
++	writel_relaxed(BIT(pin % 32), pctl->gpio_base + reg);
++}
++
++static void esp32s31_gpio_irq_mask(struct irq_data *d)
++{
++	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
++	struct esp32s31_pinctrl *pctl = gpiochip_get_data(gc);
++	unsigned int pin = irqd_to_hwirq(d);
++
++	esp32s31_update_bits(pctl, esp32s31_pin_reg(pctl, pin),
++			       GPIO_PIN_INT_ENA, 0);
++	gpiochip_disable_irq(gc, pin);
++}
++
++static void esp32s31_gpio_irq_unmask(struct irq_data *d)
++{
++	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
++	struct esp32s31_pinctrl *pctl = gpiochip_get_data(gc);
++	unsigned int pin = irqd_to_hwirq(d);
++
++	gpiochip_enable_irq(gc, pin);
++	esp32s31_update_bits(pctl, esp32s31_iomux_reg(pctl, pin),
++			       IOMUX_FUN_IE, IOMUX_FUN_IE);
++	esp32s31_update_bits(pctl, esp32s31_pin_reg(pctl, pin),
++			       GPIO_PIN_INT_ENA, GPIO_PIN_INT0_ENA);
++}
++
++static int esp32s31_gpio_irq_set_type(struct irq_data *d, unsigned int type)
++{
++	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
++	struct esp32s31_pinctrl *pctl = gpiochip_get_data(gc);
++	unsigned int pin = irqd_to_hwirq(d);
++	u32 hw_type;
++
++	switch (type & IRQ_TYPE_SENSE_MASK) {
++	case IRQ_TYPE_EDGE_RISING:
++		hw_type = ESP32S31_GPIO_INTR_POSEDGE;
++		irq_set_handler_locked(d, handle_edge_irq);
++		break;
++	case IRQ_TYPE_EDGE_FALLING:
++		hw_type = ESP32S31_GPIO_INTR_NEGEDGE;
++		irq_set_handler_locked(d, handle_edge_irq);
++		break;
++	case IRQ_TYPE_EDGE_BOTH:
++		hw_type = ESP32S31_GPIO_INTR_ANYEDGE;
++		irq_set_handler_locked(d, handle_edge_irq);
++		break;
++	case IRQ_TYPE_LEVEL_LOW:
++		hw_type = ESP32S31_GPIO_INTR_LOW_LEVEL;
++		irq_set_handler_locked(d, handle_level_irq);
++		break;
++	case IRQ_TYPE_LEVEL_HIGH:
++		hw_type = ESP32S31_GPIO_INTR_HIGH_LEVEL;
++		irq_set_handler_locked(d, handle_level_irq);
++		break;
++	default:
++		return -EINVAL;
++	}
++
++	pctl->irq_types[pin] = hw_type;
++	esp32s31_update_bits(pctl, esp32s31_pin_reg(pctl, pin),
++			       GPIO_PIN_INT_TYPE,
++			       FIELD_PREP(GPIO_PIN_INT_TYPE, hw_type));
++	esp32s31_gpio_irq_ack(d);
++	return 0;
++}
++
++static int esp32s31_gpio_irq_set_wake(struct irq_data *d, unsigned int on)
++{
++	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
++	struct esp32s31_pinctrl *pctl = gpiochip_get_data(gc);
++	unsigned int pin = irqd_to_hwirq(d);
++	u8 type = pctl->irq_types[pin];
++
++	if (on && type != ESP32S31_GPIO_INTR_LOW_LEVEL &&
++	    type != ESP32S31_GPIO_INTR_HIGH_LEVEL)
++		return -EINVAL;
++	esp32s31_update_bits(pctl, esp32s31_pin_reg(pctl, pin),
++			       GPIO_PIN_WAKEUP_ENABLE,
++			       on ? GPIO_PIN_WAKEUP_ENABLE : 0);
++	return 0;
++}
++
++static const struct irq_chip esp32s31_gpio_irq_chip = {
++	.name = "ESP32-S31-GPIO",
++	.irq_ack = esp32s31_gpio_irq_ack,
++	.irq_mask = esp32s31_gpio_irq_mask,
++	.irq_unmask = esp32s31_gpio_irq_unmask,
++	.irq_set_type = esp32s31_gpio_irq_set_type,
++	.irq_set_wake = esp32s31_gpio_irq_set_wake,
++	.flags = IRQCHIP_IMMUTABLE,
++	GPIOCHIP_IRQ_RESOURCE_HELPERS,
++};
++
++static void esp32s31_gpio_irq_handler(struct irq_desc *desc)
++{
++	struct gpio_chip *gc = irq_desc_get_handler_data(desc);
++	struct esp32s31_pinctrl *pctl = gpiochip_get_data(gc);
++	struct irq_chip *chip = irq_desc_get_chip(desc);
++	u64 pending;
++	unsigned int pin;
++
++	chained_irq_enter(chip, desc);
++	pending = readl_relaxed(pctl->gpio_base + GPIO_INT0);
++	pending |= (u64)readl_relaxed(pctl->gpio_base + GPIO_INT0_1) << 32;
++	pending &= ESP32S31_GPIO_VALID_MASK;
++
++	for_each_set_bit(pin, (unsigned long *)&pending, ESP32S31_GPIO_NR)
++		generic_handle_domain_irq(gc->irq.domain, pin);
++	chained_irq_exit(chip, desc);
++}
++
++static void esp32s31_gpio_irq_init_valid_mask(struct gpio_chip *gc,
++					      unsigned long *valid_mask,
++					      unsigned int ngpios)
++{
++	bitmap_from_u64(valid_mask, ESP32S31_GPIO_VALID_MASK);
++}
++
++static int esp32s31_pinctrl_probe(struct platform_device *pdev)
++{
++	struct device *dev = &pdev->dev;
++	struct esp32s31_pinctrl *pctl;
++	struct gpio_irq_chip *girq;
++	int irq, ret;
++	unsigned int i;
++
++	pctl = devm_kzalloc(dev, sizeof(*pctl), GFP_KERNEL);
++	if (!pctl)
++		return -ENOMEM;
++	pctl->dev = dev;
++	pctl->gpio_base = devm_platform_ioremap_resource_byname(pdev, "gpio");
++	if (IS_ERR(pctl->gpio_base))
++		return PTR_ERR(pctl->gpio_base);
++	pctl->iomux_base = devm_platform_ioremap_resource_byname(pdev, "iomux");
++	if (IS_ERR(pctl->iomux_base))
++		return PTR_ERR(pctl->iomux_base);
++	pctl->cnnt_pad_base = devm_platform_ioremap_resource_byname(pdev,
++							       "cnnt-pad-ctrl");
++	if (IS_ERR(pctl->cnnt_pad_base))
++		return PTR_ERR(pctl->cnnt_pad_base);
++	raw_spin_lock_init(&pctl->lock);
++	mutex_init(&pctl->groups_lock);
++	esp32s31_update_bits(pctl, pctl->gpio_base + GPIO_CLOCK_GATE,
++			       GPIO_CLOCK_GATE_EN, GPIO_CLOCK_GATE_EN);
++	esp32s31_update_bits(pctl, pctl->cnnt_pad_base + CNNT_PAD_CLOCK_GATE,
++			       CNNT_PAD_CLOCK_GATE_EN, CNNT_PAD_CLOCK_GATE_EN);
++	/* Linux starts with no dynamic GMAC/SDIO owner.  Do not inherit a
++	 * dedicated-pad selection left behind by the bootloader.
++	 */
++	esp32s31_update_bits(pctl, pctl->cnnt_pad_base + CNNT_PAD_CTRL,
++			       CNNT_PAD_GMAC_DEDICATED | CNNT_PAD_SDIO_DEDICATED,
++			       0);
++
++	pctl->pins = devm_kcalloc(dev, ESP32S31_GPIO_NR, sizeof(*pctl->pins),
++				  GFP_KERNEL);
++	if (!pctl->pins)
++		return -ENOMEM;
++	for (i = 0; i < ESP32S31_GPIO_NR; i++) {
++		pctl->pins[i].number = i;
++		pctl->pins[i].name = devm_kasprintf(dev, GFP_KERNEL, "gpio%u", i);
++		if (!pctl->pins[i].name)
++			return -ENOMEM;
++	}
++
++	pctl->pdesc.name = dev_name(dev);
++	pctl->pdesc.pins = pctl->pins;
++	pctl->pdesc.npins = ESP32S31_GPIO_NR;
++	pctl->pdesc.pctlops = &esp32s31_pinctrl_ops;
++	pctl->pdesc.pmxops = &esp32s31_pinmux_ops;
++	pctl->pdesc.confops = &esp32s31_pinconf_ops;
++	pctl->pdesc.owner = THIS_MODULE;
++	pctl->pctldev = devm_pinctrl_register(dev, &pctl->pdesc, pctl);
++	if (IS_ERR(pctl->pctldev))
++		return dev_err_probe(dev, PTR_ERR(pctl->pctldev),
++				     "failed to register pinctrl\n");
++
++	pctl->gc.label = dev_name(dev);
++	pctl->gc.parent = dev;
++	pctl->gc.owner = THIS_MODULE;
++	pctl->gc.base = -1;
++	pctl->gc.ngpio = ESP32S31_GPIO_NR;
++	pctl->gc.request = gpiochip_generic_request;
++	pctl->gc.free = gpiochip_generic_free;
++	pctl->gc.get_direction = esp32s31_gpio_get_direction;
++	pctl->gc.direction_input = esp32s31_gpio_direction_input;
++	pctl->gc.direction_output = esp32s31_gpio_direction_output;
++	pctl->gc.get = esp32s31_gpio_get;
++	pctl->gc.set = esp32s31_gpio_set;
++	pctl->gc.get_multiple = esp32s31_gpio_get_multiple;
++	pctl->gc.set_multiple = esp32s31_gpio_set_multiple;
++	pctl->gc.set_config = esp32s31_gpio_set_config;
++	pctl->gc.init_valid_mask = esp32s31_gpio_init_valid_mask;
++	pctl->gc.can_sleep = false;
++
++	irq = platform_get_irq(pdev, 0);
++	if (irq < 0)
++		return irq;
++	girq = &pctl->gc.irq;
++	gpio_irq_chip_set_chip(girq, &esp32s31_gpio_irq_chip);
++	girq->parent_handler = esp32s31_gpio_irq_handler;
++	girq->num_parents = 1;
++	girq->parents = devm_kmalloc(dev, sizeof(*girq->parents), GFP_KERNEL);
++	if (!girq->parents)
++		return -ENOMEM;
++	girq->parents[0] = irq;
++	girq->default_type = IRQ_TYPE_NONE;
++	girq->handler = handle_bad_irq;
++	girq->init_valid_mask = esp32s31_gpio_irq_init_valid_mask;
++
++	/* Disable all pin interrupts and discard boot-stage status. */
++	for (i = 0; i < ESP32S31_GPIO_NR; i++)
++		if (esp32s31_valid_pin(i))
++			esp32s31_update_bits(pctl, esp32s31_pin_reg(pctl, i),
++					       GPIO_PIN_INT_ENA, 0);
++	writel_relaxed(~0U, pctl->gpio_base + GPIO_STATUS_W1TC);
++	writel_relaxed(~0U, pctl->gpio_base + GPIO_STATUS1_W1TC);
++
++	ret = devm_gpiochip_add_data(dev, &pctl->gc, pctl);
++	if (ret)
++		return dev_err_probe(dev, ret, "failed to register gpiochip\n");
++
++	ret = gpiochip_add_pin_range(&pctl->gc, dev_name(dev), 0, 0,
++				     ESP32S31_GPIO_NR);
++	if (ret)
++		return dev_err_probe(dev, ret, "failed to add GPIO pin range\n");
++
++	platform_set_drvdata(pdev, pctl);
++	dev_info(dev, "registered 60 GPIOs with pinmux, matrix and IRQ support\n");
++	return 0;
++}
++
++static const struct of_device_id esp32s31_pinctrl_of_match[] = {
++	{ .compatible = "espressif,esp32s31-pinctrl" },
++	{ }
++};
++MODULE_DEVICE_TABLE(of, esp32s31_pinctrl_of_match);
++
++static struct platform_driver esp32s31_pinctrl_driver = {
++	.probe = esp32s31_pinctrl_probe,
++	.driver = {
++		.name = "esp32s31-pinctrl",
++		.of_match_table = esp32s31_pinctrl_of_match,
++	},
++};
++module_platform_driver(esp32s31_pinctrl_driver);
++
++MODULE_DESCRIPTION("Espressif ESP32-S31 pinctrl and GPIO driver");
++MODULE_LICENSE("GPL");
+--- /dev/null
++++ b/drivers/pmdomain/esp32s31-pmu.c
+@@ -0,0 +1,353 @@
++// SPDX-License-Identifier: GPL-2.0-only
++/*
++ * ESP32-S31 PMU generic power domains.
++ *
++ * The radio payload still performs the IDF active-state PMU initialization.
++ * Linux therefore owns only HPCNNT transitions; the remaining domains are
++ * published for topology and attachment but deliberately kept on.
++ */
++
++#include <linux/bitops.h>
++#include <linux/delay.h>
++#include <linux/io.h>
++#include <linux/module.h>
++#include <linux/mutex.h>
++#include <linux/of.h>
++#include <linux/of_platform.h>
++#include <linux/platform_device.h>
++#include <linux/pm_domain.h>
++#include <linux/sysfs.h>
++
++#include <dt-bindings/power/esp32s31-power.h>
++
++#define PMU_PD_TOP_CTRL		0x120
++#define PMU_PD_HPALIVE_CTRL	0x124
++#define PMU_PD_MODEMPWR_CTRL	0x128
++#define PMU_PD_HPCPU_CTRL	0x12c
++#define PMU_PD_HPCNNT_CTRL	0x130
++#define PMU_PD_MODEM_CTRL	0x134
++#define PMU_PD_LP_PERI_CTRL	0x138
++
++#define PMU_FORCE_RESET		BIT(0)
++#define PMU_FORCE_ISO		BIT(1)
++#define PMU_FORCE_PU		BIT(2)
++#define PMU_FORCE_NO_RESET	BIT(3)
++#define PMU_FORCE_NO_ISO	BIT(4)
++#define PMU_FORCE_PD		BIT(5)
++
++struct esp32s31_pmu;
++
++struct esp32s31_domain {
++	struct generic_pm_domain genpd;
++	struct esp32s31_pmu *pmu;
++	u16 reg;
++	bool controllable;
++	bool powered;
++	u32 power_on_count;
++	u32 power_off_count;
++	u32 reclaim_count;
++	u32 transition_errors;
++};
++
++struct esp32s31_pmu {
++	struct device *dev;
++	void __iomem *base;
++	struct mutex lock;
++	struct esp32s31_domain domains[ESP32S31_PD_NR];
++	struct generic_pm_domain *domain_ptrs[ESP32S31_PD_NR];
++	struct genpd_onecell_data onecell;
++	bool allow_hpcnnt_off;
++	bool radio_active;
++};
++
++#define to_esp32s31_domain(_genpd) \
++	container_of(_genpd, struct esp32s31_domain, genpd)
++
++static void esp32s31_pmu_update(struct esp32s31_pmu *pmu, u16 reg,
++			       u32 clear, u32 set)
++{
++	u32 value = readl(pmu->base + reg);
++
++	value &= ~clear;
++	value |= set;
++	writel(value, pmu->base + reg);
++	readl(pmu->base + reg);
++}
++
++static int __esp32s31_domain_power_on(struct esp32s31_domain *domain)
++{
++	struct esp32s31_pmu *pmu = domain->pmu;
++	u32 ctrl;
++
++	/* Power first, then remove isolation, finally release reset. */
++	esp32s31_pmu_update(pmu, domain->reg, PMU_FORCE_PD, PMU_FORCE_PU);
++	udelay(2);
++	esp32s31_pmu_update(pmu, domain->reg, PMU_FORCE_ISO,
++			    PMU_FORCE_NO_ISO);
++	udelay(1);
++	esp32s31_pmu_update(pmu, domain->reg, PMU_FORCE_RESET,
++			    PMU_FORCE_NO_RESET);
++	ctrl = readl(pmu->base + domain->reg);
++	if ((ctrl & (PMU_FORCE_PU | PMU_FORCE_NO_ISO |
++		     PMU_FORCE_NO_RESET)) !=
++		    (PMU_FORCE_PU | PMU_FORCE_NO_ISO | PMU_FORCE_NO_RESET) ||
++	    (ctrl & (PMU_FORCE_PD | PMU_FORCE_ISO | PMU_FORCE_RESET))) {
++		domain->transition_errors++;
++		dev_err(pmu->dev, "%s power-on force readback failed: 0x%08x\n",
++			domain->genpd.name, ctrl);
++		return -EIO;
++	}
++	domain->powered = true;
++	return 0;
++}
++
++static int __esp32s31_domain_power_off(struct esp32s31_domain *domain)
++{
++	struct esp32s31_pmu *pmu = domain->pmu;
++	u32 ctrl;
++
++	/* Reset before isolation; only then request power-down. */
++	esp32s31_pmu_update(pmu, domain->reg, PMU_FORCE_NO_RESET,
++			    PMU_FORCE_RESET);
++	udelay(1);
++	esp32s31_pmu_update(pmu, domain->reg, PMU_FORCE_NO_ISO,
++			    PMU_FORCE_ISO);
++	udelay(1);
++	esp32s31_pmu_update(pmu, domain->reg, PMU_FORCE_PU, PMU_FORCE_PD);
++	ctrl = readl(pmu->base + domain->reg);
++	if ((ctrl & (PMU_FORCE_PD | PMU_FORCE_ISO | PMU_FORCE_RESET)) !=
++		    (PMU_FORCE_PD | PMU_FORCE_ISO | PMU_FORCE_RESET) ||
++	    (ctrl & (PMU_FORCE_PU | PMU_FORCE_NO_ISO |
++		     PMU_FORCE_NO_RESET))) {
++		domain->transition_errors++;
++		dev_err(pmu->dev, "%s power-off force readback failed: 0x%08x\n",
++			domain->genpd.name, ctrl);
++		return -EIO;
++	}
++	domain->powered = false;
++	return 0;
++}
++
++static int esp32s31_domain_power_on(struct generic_pm_domain *genpd)
++{
++	struct esp32s31_domain *domain = to_esp32s31_domain(genpd);
++	int ret;
++
++	if (!domain->controllable)
++		return 0;
++
++	mutex_lock(&domain->pmu->lock);
++	ret = __esp32s31_domain_power_on(domain);
++	if (!ret)
++		domain->power_on_count++;
++	mutex_unlock(&domain->pmu->lock);
++
++	return ret;
++}
++
++static int esp32s31_domain_power_off(struct generic_pm_domain *genpd)
++{
++	struct esp32s31_domain *domain = to_esp32s31_domain(genpd);
++	int ret;
++
++	if (!domain->controllable)
++		return -EBUSY;
++
++	mutex_lock(&domain->pmu->lock);
++	/* The linked IDF Wi-Fi/BT payload accesses HPCNNT outside a device. */
++	if (domain->pmu->radio_active) {
++		mutex_unlock(&domain->pmu->lock);
++		return -EBUSY;
++	}
++	ret = __esp32s31_domain_power_off(domain);
++	if (!ret)
++		domain->power_off_count++;
++	mutex_unlock(&domain->pmu->lock);
++
++	return ret;
++}
++
++/*
++ * The linked IDF payload calls pmu_init() once immediately before radio init.
++ * It clears every force field, including HPCNNT. Re-apply the Linux-owned
++ * state after that one global initialization so genpd and firmware cannot
++ * silently disagree about the physical domain state.
++ */
++
++static const char * const esp32s31_domain_names[ESP32S31_PD_NR] = {
++	[ESP32S31_PD_TOP] = "top",
++	[ESP32S31_PD_HPALIVE] = "hp-alive",
++	[ESP32S31_PD_MODEMPWR] = "modem-power",
++	[ESP32S31_PD_HPCPU] = "hp-cpu",
++	[ESP32S31_PD_HPCNNT] = "hp-connectivity",
++	[ESP32S31_PD_MODEM] = "modem",
++	[ESP32S31_PD_LP_PERI] = "lp-peripheral",
++};
++
++static const u16 esp32s31_domain_regs[ESP32S31_PD_NR] = {
++	[ESP32S31_PD_TOP] = PMU_PD_TOP_CTRL,
++	[ESP32S31_PD_HPALIVE] = PMU_PD_HPALIVE_CTRL,
++	[ESP32S31_PD_MODEMPWR] = PMU_PD_MODEMPWR_CTRL,
++	[ESP32S31_PD_HPCPU] = PMU_PD_HPCPU_CTRL,
++	[ESP32S31_PD_HPCNNT] = PMU_PD_HPCNNT_CTRL,
++	[ESP32S31_PD_MODEM] = PMU_PD_MODEM_CTRL,
++	[ESP32S31_PD_LP_PERI] = PMU_PD_LP_PERI_CTRL,
++};
++
++static const char *esp32s31_force_state(u32 ctrl)
++{
++	if (ctrl & PMU_FORCE_PD)
++		return "off";
++	if (ctrl & PMU_FORCE_PU)
++		return "on";
++	return "firmware-auto";
++}
++
++static ssize_t domains_show(struct device *dev,
++			    struct device_attribute *attr, char *buf)
++{
++	struct esp32s31_pmu *pmu = dev_get_drvdata(dev);
++	ssize_t len = 0;
++	int i;
++
++	mutex_lock(&pmu->lock);
++	for (i = 0; i < ESP32S31_PD_NR; i++) {
++		struct esp32s31_domain *domain = &pmu->domains[i];
++		u32 ctrl = readl(pmu->base + domain->reg);
++
++		len += sysfs_emit_at(buf, len,
++			"%s policy=%s software=%s hardware=%s force=0x%02x on=%u off=%u reclaim=%u errors=%u radio-vote=%u\n",
++			domain->genpd.name,
++			(domain->genpd.flags & GENPD_FLAG_ALWAYS_ON) ?
++				"always-on" : "automatic",
++			domain->powered ? "on" : "off",
++			esp32s31_force_state(ctrl),
++			(unsigned int)(ctrl & GENMASK(5, 0)),
++			domain->power_on_count,
++			domain->power_off_count, domain->reclaim_count,
++			domain->transition_errors,
++			i == ESP32S31_PD_HPCNNT && pmu->radio_active);
++	}
++	mutex_unlock(&pmu->lock);
++
++	return len;
++}
++static DEVICE_ATTR_RO(domains);
++
++static struct attribute *esp32s31_pmu_attrs[] = {
++	&dev_attr_domains.attr,
++	NULL,
++};
++
++static const struct attribute_group esp32s31_pmu_attr_group = {
++	.attrs = esp32s31_pmu_attrs,
++};
++
++static int esp32s31_pmu_probe(struct platform_device *pdev)
++{
++	struct device *dev = &pdev->dev;
++	struct esp32s31_pmu *pmu;
++	struct resource *res;
++	bool allow_hpcnnt_off;
++	int i, ret;
++
++	pmu = devm_kzalloc(dev, sizeof(*pmu), GFP_KERNEL);
++	if (!pmu)
++		return -ENOMEM;
++
++	pmu->dev = dev;
++	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
++	if (!res)
++		return -EINVAL;
++	/* Child regulator nodes own non-overlapping PMU words in this aperture. */
++	pmu->base = devm_ioremap(dev, res->start, resource_size(res));
++	if (!pmu->base)
++		return -ENOMEM;
++	mutex_init(&pmu->lock);
++
++	allow_hpcnnt_off = of_property_read_bool(dev->of_node,
++						 "espressif,allow-hpcnnt-power-off");
++	pmu->allow_hpcnnt_off = allow_hpcnnt_off;
++	pmu->radio_active = false;
++
++	for (i = 0; i < ESP32S31_PD_NR; i++) {
++		struct esp32s31_domain *domain = &pmu->domains[i];
++
++		domain->pmu = pmu;
++		domain->reg = esp32s31_domain_regs[i];
++		domain->powered = true;
++		domain->controllable = i == ESP32S31_PD_HPCNNT;
++		domain->genpd.name = esp32s31_domain_names[i];
++		domain->genpd.power_on = esp32s31_domain_power_on;
++		domain->genpd.power_off = esp32s31_domain_power_off;
++		if (!domain->controllable || !allow_hpcnnt_off)
++			domain->genpd.flags |= GENPD_FLAG_ALWAYS_ON;
++
++		ret = pm_genpd_init(&domain->genpd, NULL, false);
++		if (ret)
++			return dev_err_probe(dev, ret,
++					     "failed to initialize domain %s\n",
++					     domain->genpd.name);
++		pmu->domain_ptrs[i] = &domain->genpd;
++	}
++
++	pmu->onecell.domains = pmu->domain_ptrs;
++	pmu->onecell.num_domains = ESP32S31_PD_NR;
++	ret = of_genpd_add_provider_onecell(dev->of_node, &pmu->onecell);
++	if (ret)
++		return dev_err_probe(dev, ret,
++				     "failed to register power-domain provider\n");
++
++	/* TOP is the parent of the HP domains; MODEM depends on MODEMPWR. */
++	pm_genpd_add_subdomain(&pmu->domains[ESP32S31_PD_TOP].genpd,
++			       &pmu->domains[ESP32S31_PD_HPALIVE].genpd);
++	pm_genpd_add_subdomain(&pmu->domains[ESP32S31_PD_TOP].genpd,
++			       &pmu->domains[ESP32S31_PD_MODEMPWR].genpd);
++	pm_genpd_add_subdomain(&pmu->domains[ESP32S31_PD_TOP].genpd,
++			       &pmu->domains[ESP32S31_PD_HPCPU].genpd);
++	pm_genpd_add_subdomain(&pmu->domains[ESP32S31_PD_TOP].genpd,
++			       &pmu->domains[ESP32S31_PD_HPCNNT].genpd);
++	pm_genpd_add_subdomain(&pmu->domains[ESP32S31_PD_MODEMPWR].genpd,
++			       &pmu->domains[ESP32S31_PD_MODEM].genpd);
++
++	/* Take explicit force ownership of HPCNNT before consumers attach. */
++	mutex_lock(&pmu->lock);
++	ret = __esp32s31_domain_power_on(
++			&pmu->domains[ESP32S31_PD_HPCNNT]);
++	if (!ret)
++		pmu->domains[ESP32S31_PD_HPCNNT].power_on_count++;
++	mutex_unlock(&pmu->lock);
++	if (ret)
++		return dev_err_probe(dev, ret,
++				     "failed to take HPCNNT force ownership\n");
++
++	platform_set_drvdata(pdev, pmu);
++	ret = devm_device_add_group(dev, &esp32s31_pmu_attr_group);
++	if (ret)
++		return dev_err_probe(dev, ret,
++				     "failed to add domain state attributes\n");
++	dev_info(dev,
++		 "HPCNNT runtime power-off %s, radio vote %s; modem domains firmware-owned\n",
++		 allow_hpcnnt_off ? "enabled" : "guarded",
++		 pmu->radio_active ? "active" : "inactive");
++
++	return 0;
++}
++
++static const struct of_device_id esp32s31_pmu_of_match[] = {
++	{ .compatible = "espressif,esp32s31-pmu" },
++	{ }
++};
++MODULE_DEVICE_TABLE(of, esp32s31_pmu_of_match);
++
++static struct platform_driver esp32s31_pmu_driver = {
++	.probe = esp32s31_pmu_probe,
++	.driver = {
++		.name = "esp32s31-pmu",
++		.of_match_table = esp32s31_pmu_of_match,
++	},
++};
++builtin_platform_driver(esp32s31_pmu_driver);
++
++MODULE_DESCRIPTION("ESP32-S31 PMU power domains");
++MODULE_LICENSE("GPL");
+--- /dev/null
++++ b/include/dt-bindings/clock/esp32s31-clock.h
+@@ -0,0 +1,64 @@
++/* SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause */
++#ifndef _DT_BINDINGS_CLOCK_ESP32S31_CLOCK_H
++#define _DT_BINDINGS_CLOCK_ESP32S31_CLOCK_H
++
++#define ESP32S31_CLK_XTAL		0
++#define ESP32S31_CLK_SYS		1
++#define ESP32S31_CLK_MPLL		2
++#define ESP32S31_CLK_SDMMC_BIU		3
++#define ESP32S31_CLK_SDMMC_CIU		4
++#define ESP32S31_CLK_EMAC_STMMACETH	5
++#define ESP32S31_CLK_EMAC_PCLK		6
++#define ESP32S31_CLK_EMAC_PTP_REF	7
++#define ESP32S31_CLK_EMAC_RGMII_TXC	8
++#define ESP32S31_CLK_UART0		9
++#define ESP32S31_CLK_UART1		10
++#define ESP32S31_CLK_UART2		11
++#define ESP32S31_CLK_WDT1		12
++#define ESP32S31_CLK_WDT0		13
++#define ESP32S31_CLK_SYSTIMER		14
++#define ESP32S31_CLK_AHB_GDMA		15
++#define ESP32S31_CLK_LEDC0		16
++#define ESP32S31_CLK_LEDC1		17
++#define ESP32S31_CLK_MCPWM0		18
++#define ESP32S31_CLK_MCPWM1		19
++#define ESP32S31_CLK_MCPWM2		20
++#define ESP32S31_CLK_MCPWM3		21
++#define ESP32S31_CLK_PCNT0		22
++#define ESP32S31_CLK_PCNT1		23
++#define ESP32S31_CLK_UHCI		24
++#define ESP32S31_CLK_I2C0		25
++#define ESP32S31_CLK_I2C1		26
++#define ESP32S31_CLK_TWAI0		27
++#define ESP32S31_CLK_TWAI1		28
++#define ESP32S31_CLK_UART3		29
++#define ESP32S31_CLK_GPSPI2		30
++#define ESP32S31_CLK_GPSPI3		31
++#define ESP32S31_CLK_I2S0		32
++#define ESP32S31_CLK_I2S1		33
++
++/* Read-only root/source clocks discovered from the bootloader hand-off. */
++#define ESP32S31_CLK_RC_FAST		34
++#define ESP32S31_CLK_RC_SLOW		35
++#define ESP32S31_CLK_XTAL32K		36
++#define ESP32S31_CLK_CPLL		37
++#define ESP32S31_CLK_BBPLL		38
++#define ESP32S31_CLK_APLL		39
++#define ESP32S31_CLK_PLL_F20		40
++#define ESP32S31_CLK_PLL_F25		41
++#define ESP32S31_CLK_PLL_F50		42
++#define ESP32S31_CLK_PLL_F80		43
++#define ESP32S31_CLK_PLL_F160		44
++#define ESP32S31_CLK_PLL_F240		45
++#define ESP32S31_CLK_CPU		46
++#define ESP32S31_CLK_MEM		47
++#define ESP32S31_CLK_APB		48
++#define ESP32S31_CLK_PLL_F120		49
++#define ESP32S31_CLK_PLL_F60		50
++#define ESP32S31_CLK_XTAL_D2		51
++#define ESP32S31_CLK_RTC_FAST		52
++#define ESP32S31_CLK_RTC_SLOW		53
++
++#define ESP32S31_CLK_NR			54
++
++#endif
+--- /dev/null
++++ b/include/dt-bindings/pinctrl/esp32s31-pinmux.h
+@@ -0,0 +1,48 @@
++/* SPDX-License-Identifier: (GPL-2.0-only OR MIT) */
++#ifndef _DT_BINDINGS_PINCTRL_ESP32S31_H
++#define _DT_BINDINGS_PINCTRL_ESP32S31_H
++
++/*
++ * ESP32-S31 pinmux entries.  A pinctrl group's pinmux property may contain
++ * any mixture of native IO_MUX selections and GPIO-matrix routes.
++ */
++#define ESP32S31_PINMUX_TYPE_SHIFT	28
++#define ESP32S31_PINMUX_TYPE_IOMUX	0
++#define ESP32S31_PINMUX_TYPE_MATRIX_OUT	1
++#define ESP32S31_PINMUX_TYPE_MATRIX_IN	2
++#define ESP32S31_PINMUX_TYPE_IOMUX_IN	3
++
++#define ESP32S31_PINMUX_INVERT		(1U << 17)
++#define ESP32S31_PINMUX_OEN_INVERT	(1U << 18)
++#define ESP32S31_PINMUX_GPIO_OEN		(1U << 19)
++
++#define ESP32S31_IOMUX(pin, function) \
++	(((pin) & 0xff) | (((function) & 0x7) << 8) | \
++	 (ESP32S31_PINMUX_TYPE_IOMUX << ESP32S31_PINMUX_TYPE_SHIFT))
++
++#define ESP32S31_MATRIX_OUT(pin, signal, flags) \
++	(((pin) & 0xff) | (((signal) & 0x1ff) << 8) | \
++	 ((flags) & (ESP32S31_PINMUX_INVERT | ESP32S31_PINMUX_OEN_INVERT | \
++		     ESP32S31_PINMUX_GPIO_OEN)) | \
++	 (ESP32S31_PINMUX_TYPE_MATRIX_OUT << ESP32S31_PINMUX_TYPE_SHIFT))
++
++#define ESP32S31_MATRIX_IN(pin, signal, flags) \
++	(((pin) & 0xff) | (((signal) & 0x1ff) << 8) | \
++	 ((flags) & ESP32S31_PINMUX_INVERT) | \
++	 (ESP32S31_PINMUX_TYPE_MATRIX_IN << ESP32S31_PINMUX_TYPE_SHIFT))
++
++/* Select a native IO_MUX input and bypass the GPIO matrix for signal. */
++#define ESP32S31_IOMUX_IN(pin, function, signal) \
++	(((pin) & 0xff) | (((signal) & 0xff) << 8) | \
++	 (((function) & 0x7) << 20) | \
++	 (ESP32S31_PINMUX_TYPE_IOMUX_IN << ESP32S31_PINMUX_TYPE_SHIFT))
++
++/* Disconnect peripheral output and select GPIO_OUT/GPIO_ENABLE for the pad. */
++#define ESP32S31_GPIO(pin) \
++	ESP32S31_MATRIX_OUT(pin, 256, ESP32S31_PINMUX_GPIO_OEN)
++
++#define ESP32S31_MATRIX_CONST_ONE	0x80
++#define ESP32S31_MATRIX_CONST_ZERO	0xc0
++#define ESP32S31_MATRIX_GPIO_OUT		256
++
++#endif
+--- /dev/null
++++ b/include/dt-bindings/power/esp32s31-power.h
+@@ -0,0 +1,15 @@
++/* SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause */
++#ifndef _DT_BINDINGS_POWER_ESP32S31_POWER_H
++#define _DT_BINDINGS_POWER_ESP32S31_POWER_H
++
++#define ESP32S31_PD_TOP			0
++#define ESP32S31_PD_HPALIVE		1
++#define ESP32S31_PD_MODEMPWR		2
++#define ESP32S31_PD_HPCPU		3
++#define ESP32S31_PD_HPCNNT		4
++#define ESP32S31_PD_MODEM		5
++#define ESP32S31_PD_LP_PERI		6
++
++#define ESP32S31_PD_NR			7
++
++#endif
+--- /dev/null
++++ b/include/dt-bindings/reset/esp32s31-reset.h
+@@ -0,0 +1,35 @@
++/* SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause */
++#ifndef _DT_BINDINGS_RESET_ESP32S31_RESET_H
++#define _DT_BINDINGS_RESET_ESP32S31_RESET_H
++
++#define ESP32S31_RST_SDMMC		0
++#define ESP32S31_RST_EMAC		1
++#define ESP32S31_RST_UART0		2
++#define ESP32S31_RST_UART1		3
++#define ESP32S31_RST_UART2		4
++#define ESP32S31_RST_UART3		5
++#define ESP32S31_RST_WDT0		6
++#define ESP32S31_RST_WDT1		7
++#define ESP32S31_RST_SYSTIMER		8
++#define ESP32S31_RST_AHB_GDMA		9
++#define ESP32S31_RST_UHCI		10
++#define ESP32S31_RST_LEDC0		11
++#define ESP32S31_RST_LEDC1		12
++#define ESP32S31_RST_MCPWM0		13
++#define ESP32S31_RST_MCPWM1		14
++#define ESP32S31_RST_MCPWM2		15
++#define ESP32S31_RST_MCPWM3		16
++#define ESP32S31_RST_PCNT0		17
++#define ESP32S31_RST_PCNT1		18
++#define ESP32S31_RST_I2C0		19
++#define ESP32S31_RST_I2C1		20
++#define ESP32S31_RST_TWAI0		21
++#define ESP32S31_RST_TWAI1		22
++#define ESP32S31_RST_GPSPI2		23
++#define ESP32S31_RST_GPSPI3		24
++#define ESP32S31_RST_I2S0		25
++#define ESP32S31_RST_I2S1		26
++
++#define ESP32S31_RST_NR			27
++
++#endif

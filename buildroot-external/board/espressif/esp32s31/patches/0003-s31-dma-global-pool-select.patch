@@ -1,0 +1,10 @@
+--- a/drivers/cache/Kconfig
++++ b/drivers/cache/Kconfig
+@@ -13,6 +13,7 @@
+ 	depends on RISCV
+ 	select RISCV_DMA_NONCOHERENT
+ 	select RISCV_NONSTANDARD_CACHE_OPS
++	select DMA_GLOBAL_POOL
+ 	help
+ 	  DMA cache maintenance on the Espressif ESP32-S31. The chip's
+ 	  external-memory (flash/PSRAM) L1 D-cache is not coherent with bus

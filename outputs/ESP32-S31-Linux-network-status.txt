@@ -1,0 +1,47 @@
+ps
+PID   USER     COMMAND
+    1 root     init
+    2 root     [kthreadd]
+    3 root     [pool_workqueue_]
+    4 root     [kworker/0:0-eve]
+    5 root     [kworker/0:0H]
+    6 root     [kworker/u4:0-ev]
+    7 root     [kworker/R-mm_pe]
+    8 root     [ksoftirqd/0]
+    9 root     [kdevtmpfs]
+   10 root     [kworker/R-inet_]
+   11 root     [oom_reaper]
+   12 root     [kworker/R-write]
+   13 root     [kswapd0]
+   14 root     [kworker/0:1-pm]
+   15 root     [kworker/u4:1-ev]
+   16 root     [kworker/u5:0]
+   17 root     [kworker/R-stmma]
+   18 root     [kworker/R-mld]
+   19 root     [kworker/R-ipv6_]
+   31 root     /sbin/klogd -n
+   52 root     /sbin/udhcpc -i eth0 -p /run/udhcpc-eth0.pid -s /usr/share/udhcp
+   56 root     /usr/sbin/crond -f
+   63 root     [dropbear]
+   64 root     /usr/sbin/dropbear -s -g -p 22 -R
+   65 root     /bin/sh --
+   68 root     ps
+~ # 
+~ # cat /proc/net/tcp
+  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode                                                     
+   0: 00000000:0016 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 176 1 (ptrval) 100 0 0 10 5                               
+~ # 
+~ # cat /sys/class/net/eth0/carrier; cat /sys/class/net/eth0/operstate
+0
+down
+~ # 
+~ # ip addr
+
+1: lo: <LOOPBACK> mtu 65536 qdisc noop state DOWN qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+2: eth0: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc mq state DOWN qlen 1000
+    link/ether b6:e6:02:15:58:f2 brd ff:ff:ff:ff:ff:ff
+3: sit0@NONE: <NOARP> mtu 1480 qdisc noop state DOWN qlen 1000
+    link/sit 0.0.0.0 brd 0.0.0.0
+~ # 
+~ # [   84.853839] random: crng init done

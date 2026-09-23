@@ -1,0 +1,32 @@
+#!/bin/sh
+
+case "$1" in
+	start)
+		[ -e /sys/class/net/eth0 ] || {
+			echo "S31 Ethernet: eth0 was not registered"
+			exit 1
+		}
+		/sbin/ip link set dev eth0 up || /sbin/ifconfig eth0 up
+		/sbin/udhcpc -i eth0 \
+			-p /run/udhcpc-eth0.pid \
+			-s /usr/share/udhcpc/default.script \
+			-b
+		;;
+	stop)
+		if [ -s /run/udhcpc-eth0.pid ]; then
+			kill "$(cat /run/udhcpc-eth0.pid)" 2>/dev/null || true
+			rm -f /run/udhcpc-eth0.pid
+		fi
+		/sbin/ip link set dev eth0 down 2>/dev/null || true
+		;;
+	restart)
+		"$0" stop
+		"$0" start
+		;;
+	*)
+		echo "Usage: $0 {start|stop|restart}"
+		exit 1
+		;;
+esac
+
+exit 0

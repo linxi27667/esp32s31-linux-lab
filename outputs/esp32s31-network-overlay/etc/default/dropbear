@@ -1,0 +1,2 @@
+# Only public-key authentication is enabled for the root SSH account.
+DROPBEAR_ARGS="-s -g -p 22"
